@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AjudaRouteImport } from './routes/ajuda'
 import { Route as CamaraRouteImport } from './routes/camara'
@@ -16,8 +17,16 @@ import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as DashboardsRouteImport } from './routes/dashboards'
 import { Route as DouRouteImport } from './routes/dou'
 import { Route as MonitoramentoRouteImport } from './routes/monitoramento'
+import { Route as NovasProposicoesRouteImport } from './routes/novas-proposicoes'
+import { Route as PerfisRouteImport } from './routes/perfis'
 import { Route as SenadoRouteImport } from './routes/senado'
+import { Route as TseRouteImport } from './routes/tse'
 
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -53,13 +62,29 @@ const MonitoramentoRoute = MonitoramentoRouteImport.update({
   path: '/monitoramento',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NovasProposicoesRoute = NovasProposicoesRouteImport.update({
+  id: '/novas-proposicoes',
+  path: '/novas-proposicoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PerfisRoute = PerfisRouteImport.update({
+  id: '/perfis',
+  path: '/perfis',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SenadoRoute = SenadoRouteImport.update({
   id: '/senado',
   path: '/senado',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TseRoute = TseRouteImport.update({
+  id: '/tse',
+  path: '/tse',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/ajuda': typeof AjudaRoute
   '/camara': typeof CamaraRoute
@@ -67,9 +92,13 @@ export interface FileRoutesByFullPath {
   '/dashboards': typeof DashboardsRoute
   '/dou': typeof DouRoute
   '/monitoramento': typeof MonitoramentoRoute
+  '/novas-proposicoes': typeof NovasProposicoesRoute
+  '/perfis': typeof PerfisRoute
   '/senado': typeof SenadoRoute
+  '/tse': typeof TseRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/ajuda': typeof AjudaRoute
   '/camara': typeof CamaraRoute
@@ -77,10 +106,14 @@ export interface FileRoutesByTo {
   '/dashboards': typeof DashboardsRoute
   '/dou': typeof DouRoute
   '/monitoramento': typeof MonitoramentoRoute
+  '/novas-proposicoes': typeof NovasProposicoesRoute
+  '/perfis': typeof PerfisRoute
   '/senado': typeof SenadoRoute
+  '/tse': typeof TseRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/ajuda': typeof AjudaRoute
   '/camara': typeof CamaraRoute
@@ -88,11 +121,15 @@ export interface FileRoutesById {
   '/dashboards': typeof DashboardsRoute
   '/dou': typeof DouRoute
   '/monitoramento': typeof MonitoramentoRoute
+  '/novas-proposicoes': typeof NovasProposicoesRoute
+  '/perfis': typeof PerfisRoute
   '/senado': typeof SenadoRoute
+  '/tse': typeof TseRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/'
     | '/admin'
     | '/ajuda'
     | '/camara'
@@ -100,9 +137,13 @@ export interface FileRouteTypes {
     | '/dashboards'
     | '/dou'
     | '/monitoramento'
+    | '/novas-proposicoes'
+    | '/perfis'
     | '/senado'
+    | '/tse'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/admin'
     | '/ajuda'
     | '/camara'
@@ -110,9 +151,13 @@ export interface FileRouteTypes {
     | '/dashboards'
     | '/dou'
     | '/monitoramento'
+    | '/novas-proposicoes'
+    | '/perfis'
     | '/senado'
+    | '/tse'
   id:
     | '__root__'
+    | '/'
     | '/admin'
     | '/ajuda'
     | '/camara'
@@ -120,10 +165,14 @@ export interface FileRouteTypes {
     | '/dashboards'
     | '/dou'
     | '/monitoramento'
+    | '/novas-proposicoes'
+    | '/perfis'
     | '/senado'
+    | '/tse'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AjudaRoute: typeof AjudaRoute
   CamaraRoute: typeof CamaraRoute
@@ -131,11 +180,21 @@ export interface RootRouteChildren {
   DashboardsRoute: typeof DashboardsRoute
   DouRoute: typeof DouRoute
   MonitoramentoRoute: typeof MonitoramentoRoute
+  NovasProposicoesRoute: typeof NovasProposicoesRoute
+  PerfisRoute: typeof PerfisRoute
   SenadoRoute: typeof SenadoRoute
+  TseRoute: typeof TseRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin': {
       id: '/admin'
       path: '/admin'
@@ -185,6 +244,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MonitoramentoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/novas-proposicoes': {
+      id: '/novas-proposicoes'
+      path: '/novas-proposicoes'
+      fullPath: '/novas-proposicoes'
+      preLoaderRoute: typeof NovasProposicoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/perfis': {
+      id: '/perfis'
+      path: '/perfis'
+      fullPath: '/perfis'
+      preLoaderRoute: typeof PerfisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/senado': {
       id: '/senado'
       path: '/senado'
@@ -192,10 +265,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SenadoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tse': {
+      id: '/tse'
+      path: '/tse'
+      fullPath: '/tse'
+      preLoaderRoute: typeof TseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AjudaRoute: AjudaRoute,
   CamaraRoute: CamaraRoute,
@@ -203,7 +284,10 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardsRoute: DashboardsRoute,
   DouRoute: DouRoute,
   MonitoramentoRoute: MonitoramentoRoute,
+  NovasProposicoesRoute: NovasProposicoesRoute,
+  PerfisRoute: PerfisRoute,
   SenadoRoute: SenadoRoute,
+  TseRoute: TseRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

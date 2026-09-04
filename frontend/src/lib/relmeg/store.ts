@@ -1,9 +1,11 @@
-﻿import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { Parlamentar, Filters, EMPTY_FILTERS } from './types';
+﻿import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { Parlamentar, Filters, EMPTY_FILTERS } from "./types";
+import { inserirParlamentares, usuarioIdSupabase } from "./cloud";
+import { cargoLabel, type TseCandidato } from "./tse";
 
 export type RelmegItem = Parlamentar & {
-  categoria?: 'camara' | 'senado' | 'dou' | 'monitoramento' | string;
+  categoria?: "camara" | "senado" | "dou" | "monitoramento" | string;
   [key: string]: any;
 };
 
@@ -24,7 +26,7 @@ export interface RelmegPrefs {
   nomeExibicao?: string;
   mostrarSaudacao?: boolean;
   mostrarKpisPerfis?: boolean;
-  visaoPadraoPerfis?: 'cards' | 'tabela';
+  visaoPadraoPerfis?: "cards" | "tabela";
   [key: string]: any;
 }
 
@@ -32,18 +34,21 @@ interface RelmegState {
   data: RelmegItem[];
   filters: Filters;
   sincronizando: boolean;
+  carregandoBase: boolean;
   usuario: string | null;
   sessao: { usuario: string | null } | null;
   estaAutenticado: boolean;
   textos: Record<string, string>;
   prefs: RelmegPrefs;
 
-  addItem: (item: Partial<RelmegItem>) => void;
+  addItem: (item: Partial<RelmegItem>) => RelmegItem;
   removeItem: (id: string) => void;
+  salvarCandidatosNoMonitoramento: (candidatos: TseCandidato[]) => Promise<number>;
   editarParlamentar: (id: string, updates: Partial<RelmegItem>) => void;
   excluirParlamentar: (id: string) => void;
   setAllData: (items: RelmegItem[]) => void;
   substituirBase: (items: RelmegItem[]) => void;
+  substituirCategoria: (categoria: string, items: RelmegItem[]) => void;
   limparBase: () => void;
 
   setFilter: (key: keyof Filters, value: string) => void;
@@ -78,7 +83,8 @@ const dadosIniciais: RelmegItem[] = [
     setor1: "Setor Eletrico",
     setor2: "Infraestrutura",
     setor3: "Mineracao",
-    descricao: "Deputado atuante na Comissao de Minas e Energia, com foco em seguranca juridica para o setor.",
+    descricao:
+      "Deputado atuante na Comissao de Minas e Energia, com foco em seguranca juridica para o setor.",
     proposicao1: "PL 4162/2024",
     ementa1: "Estabelece novas diretrizes para o marco regulatorio de transicao energetica.",
     link1: "https://camara.leg.br",
@@ -89,7 +95,7 @@ const dadosIniciais: RelmegItem[] = [
     ementa3: "",
     link3: "",
     anotacoes: "Interlocutor-chave para debates regulatorios e emendas setoriais.",
-  }
+  },
 ];
 
 const prefsIniciais: RelmegPrefs = {
@@ -104,9 +110,27 @@ const prefsIniciais: RelmegPrefs = {
     { key: "proposicoes", titulo: "Proposicoes Monitoradas", visivel: true },
   ],
   paineis: [
-    { key: "partido", titulo: "Parlamentares por Partido", descricao: "Distribuicao da base por legenda.", visivel: true, tipo: "barra" },
-    { key: "setor", titulo: "Recorte Setorial", descricao: "Foco de atuacao por segmento produtivo.", visivel: true, tipo: "ranking" },
-    { key: "interesse", titulo: "Temas de Interesse", descricao: "Pautas com maior convergencia de interlocucao.", visivel: true, tipo: "pizza" },
+    {
+      key: "partido",
+      titulo: "Parlamentares por Partido",
+      descricao: "Distribuicao da base por legenda.",
+      visivel: true,
+      tipo: "barra",
+    },
+    {
+      key: "setor",
+      titulo: "Recorte Setorial",
+      descricao: "Foco de atuacao por segmento produtivo.",
+      visivel: true,
+      tipo: "ranking",
+    },
+    {
+      key: "interesse",
+      titulo: "Temas de Interesse",
+      descricao: "Pautas com maior convergencia de interlocucao.",
+      visivel: true,
+      tipo: "pizza",
+    },
   ],
 };
 
@@ -116,47 +140,103 @@ export const useRelmeg = create<RelmegState>()(
       data: dadosIniciais,
       filters: EMPTY_FILTERS,
       sincronizando: false,
+      carregandoBase: false,
       usuario: "Admin",
       sessao: { usuario: "Admin" },
       estaAutenticado: true,
       textos: {},
       prefs: prefsIniciais,
 
-      addItem: (newItem) =>
-        set((state) => {
-          const itemCompleto: RelmegItem = {
-            id: Math.random().toString(36).substring(2, 9),
-            nome: "",
-            partido: "",
-            uf: "",
-            cargo: "",
-            interesse1: "",
-            interesse2: "",
-            contrario1: "",
-            contrario2: "",
-            setor1: "",
-            setor2: "",
-            setor3: "",
-            descricao: "",
-            proposicao1: "",
-            ementa1: "",
-            link1: "",
-            proposicao2: "",
-            ementa2: "",
-            link2: "",
-            proposicao3: "",
-            ementa3: "",
-            link3: "",
-            anotacoes: "",
-            ...newItem,
-          };
-          return { data: [itemCompleto, ...state.data] };
-        }),
+      addItem: (newItem) => {
+        const itemCompleto: RelmegItem = {
+          id: Math.random().toString(36).substring(2, 9),
+          nome: "",
+          partido: "",
+          uf: "",
+          cargo: "",
+          interesse1: "",
+          interesse2: "",
+          contrario1: "",
+          contrario2: "",
+          setor1: "",
+          setor2: "",
+          setor3: "",
+          descricao: "",
+          proposicao1: "",
+          ementa1: "",
+          link1: "",
+          proposicao2: "",
+          ementa2: "",
+          link2: "",
+          proposicao3: "",
+          ementa3: "",
+          link3: "",
+          anotacoes: "",
+          ...newItem,
+        };
+        set((state) => ({ data: [itemCompleto, ...state.data] }));
+        return itemCompleto;
+      },
 
       removeItem: (id) =>
         set((state) => ({
           data: state.data.filter((item) => item.id !== id),
         })),
+
+      salvarCandidatosNoMonitoramento: async (candidatos) => {
+        const { data } = get();
+        const monitorados = new Set(
+          data.filter((item) => item.categoria === "monitoramento").map((item) => item.nome),
+        );
+        const novos = candidatos.filter((c) => !monitorados.has(c.nomeCompleto));
+        if (novos.length === 0) return 0;
+
+        const linhas = novos.map((c) => ({
+          nome: c.nomeCompleto,
+          partido: c.siglaPartido ?? "",
+          uf: c.uf,
+          cargo: cargoLabel(c.codigoCargo),
+          interesse1: `Candidato ${c.codigoCargo ? cargoLabel(c.codigoCargo) : ""}`.trim(),
+          descricao: c.descricaoSituacao ?? "",
+        }));
+
+        let erroNuvem: unknown = null;
+        try {
+          const userId = await usuarioIdSupabase();
+          if (userId) await inserirParlamentares(userId, linhas);
+          else erroNuvem = new Error("Sessão na nuvem indisponível.");
+        } catch (err) {
+          erroNuvem = err;
+        }
+
+        const hoje = new Date().toLocaleDateString("pt-BR");
+        for (const c of novos) {
+          const { id, ...resto } = c;
+          get().addItem({
+            ...resto,
+            id: String(id),
+            categoria: "monitoramento",
+            nome: c.nomeCompleto,
+            partido: c.siglaPartido ?? "",
+            uf: c.uf,
+            cargo: cargoLabel(c.codigoCargo),
+            interesse1: cargoLabel(c.codigoCargo),
+            descricao: c.descricaoSituacao ?? "",
+            proposicao1: `Candidato nº ${c.numero ?? "—"}`,
+            link1: c.fotoUrl ?? "",
+            titulo: [c.siglaPartido, c.numero].filter(Boolean).join(" "),
+            status: "Em monitoramento",
+            atualizacao: hoje,
+          });
+        }
+
+        if (erroNuvem) {
+          const detalhe =
+            erroNuvem instanceof Error && erroNuvem.message ? ` ${erroNuvem.message}` : "";
+          throw new Error(`Salvo localmente, mas não foi possível sincronizar na nuvem.${detalhe}`);
+        }
+        return novos.length;
+      },
 
       editarParlamentar: (id, updates) =>
         set((state) => ({
@@ -170,6 +250,10 @@ export const useRelmeg = create<RelmegState>()(
 
       setAllData: (items) => set({ data: items }),
       substituirBase: (items) => set({ data: items }),
+      substituirCategoria: (categoria, items) =>
+        set((state) => ({
+          data: [...items, ...state.data.filter((item) => item.categoria !== categoria)],
+        })),
       limparBase: () => set({ data: [] }),
 
       setFilter: (key, value) =>
@@ -179,8 +263,7 @@ export const useRelmeg = create<RelmegState>()(
 
       clearFilters: () => set({ filters: EMPTY_FILTERS }),
 
-      setTexto: (chave, valor) =>
-        set((state) => ({ textos: { ...state.textos, [chave]: valor } })),
+      setTexto: (chave, valor) => set((state) => ({ textos: { ...state.textos, [chave]: valor } })),
       resetTextos: () => set({ textos: {} }),
 
       setPref: (keyOrPrefs, value) =>
@@ -255,7 +338,8 @@ export const useRelmeg = create<RelmegState>()(
       resetPrefs: () => set({ prefs: prefsIniciais }),
 
       iniciarSessao: (usuario = "Admin") => {
-        const nomeUsuario = typeof usuario === "string" ? usuario : usuario?.nome || usuario?.login || "Admin";
+        const nomeUsuario =
+          typeof usuario === "string" ? usuario : usuario?.nome || usuario?.login || "Admin";
         set({
           usuario: nomeUsuario,
           sessao: { usuario: nomeUsuario },
@@ -268,18 +352,23 @@ export const useRelmeg = create<RelmegState>()(
       logout: () => set({ usuario: null, sessao: null, estaAutenticado: false }),
     }),
     {
-      name: 'relmeg-storage-local',
-    }
-  )
+      name: "relmeg-storage-local",
+    },
+  ),
 );
 
 export const limparBase = () => useRelmeg.getState().limparBase();
 export const substituirBase = (items: RelmegItem[]) => useRelmeg.getState().substituirBase(items);
-export const editarParlamentar = (id: string, updates: Partial<RelmegItem>) => useRelmeg.getState().editarParlamentar(id, updates);
+export const substituirCategoria = (categoria: string, items: RelmegItem[]) =>
+  useRelmeg.getState().substituirCategoria(categoria, items);
+export const editarParlamentar = (id: string, updates: Partial<RelmegItem>) =>
+  useRelmeg.getState().editarParlamentar(id, updates);
 export const excluirParlamentar = (id: string) => useRelmeg.getState().excluirParlamentar(id);
-export const setFilter = (key: keyof Filters, value: string) => useRelmeg.getState().setFilter(key, value);
+export const setFilter = (key: keyof Filters, value: string) =>
+  useRelmeg.getState().setFilter(key, value);
 export const clearFilters = () => useRelmeg.getState().clearFilters();
-export const setTexto = (chave: string, valor: string) => useRelmeg.getState().setTexto(chave, valor);
+export const setTexto = (chave: string, valor: string) =>
+  useRelmeg.getState().setTexto(chave, valor);
 export const resetTextos = () => useRelmeg.getState().resetTextos();
 export const atualizarCard = (grupoOrKey: string, keyOrUpdates: any, updates?: Partial<CardPref>) =>
   useRelmeg.getState().atualizarCard(grupoOrKey, keyOrUpdates, updates);
@@ -288,6 +377,12 @@ export const moverCard = (grupoOrKey: string, keyOrDirecao: any, direcaoOrStep?:
 export const resetPrefs = () => useRelmeg.getState().resetPrefs();
 export const setPref = (keyOrPrefs: string | Partial<RelmegPrefs>, value?: any) =>
   useRelmeg.getState().setPref(keyOrPrefs, value);
+export function criarParlamentar(): RelmegItem | null {
+  const item = useRelmeg.getState().addItem({ nome: "Novo parlamentar" });
+  return item;
+}
+export const salvarCandidatosNoMonitoramento = (candidatos: TseCandidato[]) =>
+  useRelmeg.getState().salvarCandidatosNoMonitoramento(candidatos);
 export const iniciarSessao = (usuario?: any) => useRelmeg.getState().iniciarSessao(usuario);
 export const encerrarSessao = () => useRelmeg.getState().encerrarSessao();
 export const login = () => useRelmeg.getState().login();

@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
-import { CheckCircle2, AlertTriangle, Download, Trash2, LogOut, UploadCloud, RotateCcw } from "lucide-react";
+import {
+  CheckCircle2,
+  AlertTriangle,
+  Download,
+  Trash2,
+  LogOut,
+  UploadCloud,
+  RotateCcw,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +23,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { limparBase, logout, resetTextos, substituirBase, setTexto, useRelmeg } from "@/lib/relmeg/store";
+import {
+  limparBase,
+  logout,
+  resetTextos,
+  substituirBase,
+  setTexto,
+  useRelmeg,
+} from "@/lib/relmeg/store";
 import { CAMPOS_TEXTO } from "@/lib/relmeg/textos";
 import {
   OBRIGATORIOS,
@@ -32,10 +47,14 @@ export const Route = createFileRoute("/admin")({
       { title: "Admin — Importação de Base | RelMeg" },
       {
         name: "description",
-        content: "Painel administrativo do RelMeg para importar planilhas, conferir dados e editar textos da plataforma.",
+        content:
+          "Painel administrativo do RelMeg para importar planilhas, conferir dados e editar textos da plataforma.",
       },
       { property: "og:title", content: "Admin — Importação de Base | RelMeg" },
-      { property: "og:description", content: "Importe, valide e gerencie sua base de parlamentares." },
+      {
+        property: "og:description",
+        content: "Importe, valide e gerencie sua base de parlamentares.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -128,7 +147,11 @@ function Painel() {
         </div>
         <div className="mt-4 flex flex-wrap gap-1.5">
           {OBRIGATORIOS.map((c) => (
-            <Badge key={c.key} variant="outline" className="border-primary/40 font-normal text-primary">
+            <Badge
+              key={c.key}
+              variant="outline"
+              className="border-primary/40 font-normal text-primary"
+            >
               {c.label} *
             </Badge>
           ))}
@@ -170,7 +193,9 @@ function Painel() {
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {preview.faltantes.length === 0 ? (
-                  <span className="text-sm text-muted-foreground">Nenhuma — planilha completa.</span>
+                  <span className="text-sm text-muted-foreground">
+                    Nenhuma — planilha completa.
+                  </span>
                 ) : (
                   preview.faltantes.map((c) => (
                     <Badge key={c} variant="outline" className="font-normal">
@@ -181,7 +206,8 @@ function Painel() {
               </div>
               {faltandoObrigatorio.length > 0 && (
                 <p className="mt-2 text-xs text-destructive">
-                  Campos obrigatórios ausentes: {faltandoObrigatorio.join(", ")}. Ajuste a planilha para continuar.
+                  Campos obrigatórios ausentes: {faltandoObrigatorio.join(", ")}. Ajuste a planilha
+                  para continuar.
                 </p>
               )}
             </div>
@@ -261,6 +287,8 @@ function Painel() {
           ))}
         </div>
       </div>
+
+      <p className="pt-2 text-center text-xs text-muted-foreground/70">Criado por Victor Souza</p>
     </div>
   );
 }
@@ -287,8 +315,12 @@ function Tabela({ rows }: { rows: Parlamentar[] }) {
               <TableCell className="text-foreground/90">{p.partido}</TableCell>
               <TableCell className="text-foreground/90">{p.uf}</TableCell>
               <TableCell className="text-foreground/90">{p.cargo}</TableCell>
-              <TableCell className="text-success">{temasInteresseDe(p).join(", ") || "—"}</TableCell>
-              <TableCell className="text-destructive">{temasContrariosDe(p).join(", ") || "—"}</TableCell>
+              <TableCell className="text-success">
+                {temasInteresseDe(p).join(", ") || "—"}
+              </TableCell>
+              <TableCell className="text-destructive">
+                {temasContrariosDe(p).join(", ") || "—"}
+              </TableCell>
               <TableCell className="text-foreground/80">{setoresDe(p).join(", ") || "—"}</TableCell>
             </TableRow>
           ))}

@@ -1,7 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import deputados, proposicoes, eventos, autores, frentes, monitoramento, dou
+from routers import (
+    deputados,
+    proposicoes,
+    eventos,
+    autores,
+    frentes,
+    monitoramento,
+    dou,
+    tse,
+    ai,
+    fachada,
+)
 from routers.senado import materias as senado_materias, comissoes as senado_comissoes
 
 app = FastAPI(
@@ -27,6 +38,11 @@ app.include_router(monitoramento.router)
 app.include_router(dou.router)
 app.include_router(senado_materias.router)
 app.include_router(senado_comissoes.router)
+app.include_router(tse.router)
+app.include_router(tse.router, prefix="/api")
+app.include_router(ai.router)
+app.include_router(ai.router, prefix="/api")
+app.include_router(fachada.router)
 
 @app.get("/")
 def home():

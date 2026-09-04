@@ -77,3 +77,9 @@ export async function limparBaseNaNuvem(userId: string) {
   const { error } = await supabase.from("parlamentares").delete().eq("user_id", userId);
   if (error) throw error;
 }
+
+/** Retorna o id do usuário autenticado no Supabase (ou null se não estiver logado). */
+export async function usuarioIdSupabase(): Promise<string | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id ?? null;
+}

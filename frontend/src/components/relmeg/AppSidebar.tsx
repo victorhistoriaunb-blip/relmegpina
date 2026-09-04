@@ -1,14 +1,16 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { 
-  LayoutGrid, 
-  BarChart3, 
-  LifeBuoy, 
-  ShieldCheck, 
-  Settings, 
-  FileText, 
-  Building2, 
-  Newspaper, 
-  Radar 
+import {
+  LayoutGrid,
+  BarChart3,
+  LifeBuoy,
+  ShieldCheck,
+  Settings,
+  FileText,
+  Building2,
+  Newspaper,
+  Radar,
+  Vote,
+  Sparkles,
 } from "lucide-react";
 import { LogoLockup } from "./Logo";
 import {
@@ -27,10 +29,12 @@ import {
 import { useRelmeg } from "@/lib/relmeg/store";
 
 const items = [
-  { title: "Perfis", url: "/", icon: LayoutGrid },
+  { title: "Perfis", url: "/perfis", icon: LayoutGrid },
   { title: "Dashboards", url: "/dashboards", icon: BarChart3 },
   { title: "Câmara", url: "/camara", icon: FileText },
   { title: "Senado", url: "/senado", icon: Building2 },
+  { title: "Novas Proposições", url: "/novas-proposicoes", icon: Sparkles },
+  { title: "Eleições", url: "/tse", icon: Vote },
   { title: "DOU", url: "/dou", icon: Newspaper },
   { title: "Monitoramento", url: "/monitoramento", icon: Radar },
   { title: "Central de Ajuda", url: "/ajuda", icon: LifeBuoy },
@@ -71,7 +75,9 @@ export function AppSidebar() {
       {!collapsed && (
         <SidebarFooter className="px-4 pb-4">
           <div className="rounded-md border border-sidebar-border bg-sidebar-accent/40 p-3">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Base ativa</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+              Base ativa
+            </p>
             <p className="mt-1 font-display text-lg">{data.length} registros</p>
           </div>
         </SidebarFooter>

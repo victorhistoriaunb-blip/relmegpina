@@ -15,10 +15,14 @@ export const Route = createFileRoute("/ajuda")({
       { title: "Central de Ajuda — RelMeg" },
       {
         name: "description",
-        content: "Como preparar a planilha, importar dados, usar filtros, interpretar gráficos e copiar briefings no RelMeg.",
+        content:
+          "Como preparar a planilha, importar dados, usar filtros, interpretar gráficos e copiar briefings no RelMeg.",
       },
       { property: "og:title", content: "Central de Ajuda — RelMeg" },
-      { property: "og:description", content: "Guia de uso do RelMeg para times de Relações Governamentais." },
+      {
+        property: "og:description",
+        content: "Guia de uso do RelMeg para times de Relações Governamentais.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -33,14 +37,14 @@ const topicos = [
       "Use a primeira linha como cabeçalho, com uma coluna por campo. A ordem das colunas não importa — o RelMeg reconhece os nomes automaticamente. Linhas sem o nome do parlamentar são ignoradas. Baixe o modelo no Admin para começar com a estrutura correta.",
   },
   {
-    titulo: "Campos obrigatórios",
+    titulo: "A planilha se adapta às suas colunas",
     conteudo:
-      "Nome, Partido, UF, Cargo, Tema de Interesse 1, Tema de Interesse 2, Tema Contrário 1, Tema Contrário 2 e Setor 1. Sem essas colunas a importação fica bloqueada.",
+      "Não há campos obrigatórios: a planilha reconhece qualquer coluna inserida e adapta a interpretação automaticamente. Use a primeira linha como cabeçalho, com uma coluna por campo. A ordem das colunas não importa — basta um nome reconhecível. Linhas sem o nome do parlamentar são ignoradas.",
   },
   {
-    titulo: "Campos opcionais",
+    titulo: "Campos trabalhados da planilha",
     conteudo:
-      "Setor 2, Setor 3, Breve Descrição, Proposição 1, Proposição 2, Proposição 3 e Anotações Internas. Para cada proposição você pode informar também as colunas Ementa 1/2/3 e Link 1/2/3 — ou escrever tudo em uma célula no formato 'Número | Ementa | https://link'.",
+      "O RelMeg lê automaticamente colunas como Nome, Partido, UF, Cargo, Temas de Interesse, Temas Contrários, Setores, Breve Descrição, Proposições (número, ementa e link) e Anotações Internas. Para cada proposição você pode informar também as colunas Ementa 1/2/3 e Link 1/2/3 — ou escrever tudo em uma célula no formato 'Número | Ementa | https://link'.",
   },
   {
     titulo: "Como os campos são consolidados",
@@ -87,17 +91,14 @@ function Ajuda() {
         <h2 className="text-sm font-semibold">Colunas reconhecidas</h2>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {CAMPOS.map((c) => (
-            <Badge
-              key={c.key}
-              variant={c.obrigatorio ? "outline" : "secondary"}
-              className={c.obrigatorio ? "border-primary/40 font-normal text-primary" : "font-normal"}
-            >
+            <Badge key={c.key} variant="secondary" className="font-normal">
               {c.label}
-              {c.obrigatorio ? " *" : ""}
             </Badge>
           ))}
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">* Campos obrigatórios.</p>
+        <p className="mt-3 text-xs text-muted-foreground">
+          A planilha reconhece qualquer coluna inserida e adapta a interpretação automaticamente.
+        </p>
       </div>
 
       <div className="panel panel-hover rounded-xl px-5">
