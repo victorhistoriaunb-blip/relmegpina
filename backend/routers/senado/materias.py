@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Query
+from starlette.requests import Request
 from typing import Optional
 import httpx
 import asyncio
 import re
+
+from rate_limit import limiter, LIMITE_PROPOSICOES
 
 router = APIRouter(prefix="/senado/materias", tags=["Senado - Matérias"])
 
@@ -83,15 +86,18 @@ def _colegiado_em(registro) -> dict:
     return colegiado or {}
 
 
-@router.get("/")
-async def listar_materias_senado(
-    sigla: Optional[str] = Query(None, description="Sigla do tipo de matéria, ex: PEC, PL, PRS"),
-    ano: Optional[int] = Query(None, description="Ano da matéria, ex: 2026"),
-    tramitando: Optional[str] = Query("S", description="Apenas matérias em tramitação: S ou N"),
-    enriquecer: bool = Query(True, description="Se false, retorna apenas os campos básicos (mais rápido)"),
-    keywords: Optional[str] = Query(None, description="Termo livre para filtrar por ementa ou autor"),
-):
-    """Busca matérias legislativas no Senado Federal, com situação, comissão e relator."""
+async def _listar_materias_senado(
+    sigla: Optional[str],
+    ano: Optional[int],
+    tramitando: Optional[str],
+    enriquecer: bool,
+    keywords: Optional[str],
+) -> dict:
+    """Busca matérias legislativas no Senado Federal, com situação, comissão e relator.
+
+    Implementação interna compartilhada entre a rota HTTP decorada e a
+    fachada (/api/senado) — sem rate limit próprio para não duplicar cotas.
+    """
 
     params = {}
     if sigla:
@@ -160,3 +166,23 @@ async def listar_materias_senado(
             }
     except httpx.HTTPError:
         return {"erro": "Não foi possível acessar a API do Senado", "status": 502}
+
+
+@router.get("/")
+@limiter.limit(LIMITE_PROPOSICOES)
+async def listar_materias_senado(
+    request: Request,
+    sigla: Optional[str] = Query(None, max_length=10, description="Sigla do tipo de matéria, ex: PEC, PL, PRS"),
+    ano: Optional[int] = Query(None, ge=1900, le=2100, description="Ano da matéria, ex: 2026"),
+    tramitando: Optional[str] = Query("S", pattern="^[SN]$", description="Apenas matérias em tramitação: S ou N"),
+    enriquecer: bool = Query(True, description="Se false, retorna apenas os campos básicos (mais rápido)"),
+    keywords: Optional[str] = Query(None, min_length=3, max_length=120, description="Termo livre para filtrar por ementa ou autor"),
+):
+    """Busca matérias legislativas no Senado Federal, com situação, comissão e relator."""
+    return await _listar_materias_senado(
+        sigla=sigla,
+        ano=ano,
+        tramitando=tramitando,
+        enriquecer=enriquecer,
+        keywords=keywords,
+    )

@@ -1,13 +1,16 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from starlette.requests import Request
 from typing import Optional
+
+from rate_limit import limiter, LIMITE_IA
 
 router = APIRouter(prefix="/ai", tags=["IA - Resumo DOU"])
 
 
 class ResumirDOURequest(BaseModel):
-    titulo: Optional[str] = Field(None, description="Título da publicação no DOU")
-    texto: str = Field(..., description="Texto completo da publicação")
+    titulo: Optional[str] = Field(None, max_length=300, description="Título da publicação no DOU")
+    texto: str = Field(..., min_length=1, max_length=200_000, description="Texto completo da publicação")
 
 
 class ResumirDOUResponse(BaseModel):
@@ -16,7 +19,8 @@ class ResumirDOUResponse(BaseModel):
 
 
 @router.post("/resumir-dou", response_model=ResumirDOUResponse)
-async def resumir_dou(payload: ResumirDOURequest):
+@limiter.limit(LIMITE_IA)
+async def resumir_dou(request: Request, payload: ResumirDOURequest):
     """Gera um resumo executivo de uma publicação do DOU.
 
     POC: como não há chave de API de LLM configurada, o endpoint devolve um

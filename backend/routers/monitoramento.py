@@ -1,14 +1,19 @@
 from fastapi import APIRouter, Query
+from starlette.requests import Request
 from typing import Optional
 import requests
+
+from rate_limit import limiter, LIMITE_MONITORAMENTO
 
 router = APIRouter(prefix="/monitoramento", tags=["Monitoramento Setorial"])
 
 @router.get("/camara")
+@limiter.limit(LIMITE_MONITORAMENTO)
 def monitorar_camara(
-    q: str = Query(..., description="Palavra-chave para buscar nas ementas, ex: energia, tarifa, iFood"),
-    ano: int = Query(2026, description="Ano das proposições"),
-    itens: int = Query(10, description="Quantidade máxima de resultados")
+    request: Request,
+    q: str = Query(..., min_length=3, max_length=120, description="Palavra-chave para buscar nas ementas, ex: energia, tarifa, iFood"),
+    ano: int = Query(2026, ge=1900, le=2100, description="Ano das proposições"),
+    itens: int = Query(10, ge=1, le=50, description="Quantidade máxima de resultados")
 ):
     """Busca proposições na Câmara filtrando por palavras-chave na ementa ou texto."""
     url = "https://dadosabertos.camara.leg.br/api/v2/proposicoes"
@@ -46,9 +51,11 @@ def monitorar_camara(
 
 
 @router.get("/senado")
+@limiter.limit(LIMITE_MONITORAMENTO)
 def monitorar_senado(
-    q: str = Query(..., description="Palavra-chave para buscar nas matérias do Senado, ex: energia, marco legal"),
-    ano: Optional[int] = Query(2026, description="Ano da matéria")
+    request: Request,
+    q: str = Query(..., min_length=3, max_length=120, description="Palavra-chave para buscar nas matérias do Senado, ex: energia, marco legal"),
+    ano: Optional[int] = Query(2026, ge=1900, le=2100, description="Ano da matéria")
 ):
     """Busca matérias no Senado filtrando por palavra-chave na ementa."""
     url = "https://legis.senado.leg.br/dadosabertos/materia/pesquisa/lista"

@@ -1,8 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query
+from starlette.requests import Request
 from typing import Optional
 import httpx
 import asyncio
 import re
+
+from rate_limit import limiter, LIMITE_PROPOSICOES
 
 router = APIRouter(prefix="/proposicoes", tags=["Proposições"])
 
@@ -83,15 +86,18 @@ async def _enriquecer_camara(
     }
 
 
-@router.get("/")
-async def listar_proposicoes(
-    siglaTipo: Optional[str] = Query(None, description="Ex: PL, PEC, MPV"),
-    ano: Optional[int] = Query(None, description="Ex: 2026, 2025"),
-    keywords: Optional[str] = Query(None, description="Palavra-chave para buscar na ementa (ex: energia, imposto)"),
-    itens: int = Query(10, description="Quantidade máxima de itens retornados"),
-    enriquecer: bool = Query(True, description="Se false, retorna apenas os campos básicos (mais rápido)"),
-):
-    """Busca proposições legislativas na API da Câmara, com situação, comissão e relator."""
+async def _listar_proposicoes(
+    siglaTipo: Optional[str],
+    ano: Optional[int],
+    keywords: Optional[str],
+    itens: int,
+    enriquecer: bool,
+) -> dict:
+    """Busca proposições legislativas na API da Câmara, com situação, comissão e relator.
+
+    Implementação interna compartilhada entre a rota HTTP decorada e a
+    fachada (/api/camara) — sem rate limit próprio para não duplicar cotas.
+    """
 
     params = {
         "itens": itens,
@@ -153,3 +159,23 @@ async def listar_proposicoes(
         raise
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="Não foi possível acessar a API da Câmara") from exc
+
+
+@router.get("/")
+@limiter.limit(LIMITE_PROPOSICOES)
+async def listar_proposicoes(
+    request: Request,
+    siglaTipo: Optional[str] = Query(None, description="Ex: PL, PEC, MPV"),
+    ano: Optional[int] = Query(None, ge=1900, le=2100, description="Ex: 2026, 2025"),
+    keywords: Optional[str] = Query(None, min_length=3, max_length=120, description="Palavra-chave para buscar na ementa (ex: energia, imposto)"),
+    itens: int = Query(10, ge=1, le=100, description="Quantidade máxima de itens retornados"),
+    enriquecer: bool = Query(True, description="Se false, retorna apenas os campos básicos (mais rápido)"),
+):
+    """Busca proposições legislativas na API da Câmara, com situação, comissão e relator."""
+    return await _listar_proposicoes(
+        siglaTipo=siglaTipo,
+        ano=ano,
+        keywords=keywords,
+        itens=itens,
+        enriquecer=enriquecer,
+    )

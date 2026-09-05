@@ -1,15 +1,20 @@
 from fastapi import APIRouter, Query
+from starlette.requests import Request
 from typing import Optional
 import requests
 from datetime import date
 
+from rate_limit import limiter, LIMITE_DOU
+
 router = APIRouter(prefix="/dou", tags=["Diário Oficial da União (DOU)"])
 
 @router.get("/pesquisa")
+@limiter.limit(LIMITE_DOU)
 def pesquisar_dou(
-    q: str = Query(..., description="Termo de busca no DOU, ex: ANEEL, concessão, iFood, tarifa"),
-    data: Optional[str] = Query(None, description="Data da publicação no formato AAAA-MM-DD (ex: 2026-08-24). Se vazio, busca recentes."),
-    secao: int = Query(1, description="Seção do DOU: 1 (leis/atos normativos), 2 (pessoal), 3 (contratos/editais)")
+    request: Request,
+    q: str = Query(..., min_length=3, max_length=150, description="Termo de busca no DOU, ex: ANEEL, concessão, iFood, tarifa"),
+    data: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="Data da publicação no formato AAAA-MM-DD (ex: 2026-08-24). Se vazio, busca recentes."),
+    secao: int = Query(1, ge=1, le=3, description="Seção do DOU: 1 (leis/atos normativos), 2 (pessoal), 3 (contratos/editais)")
 ):
     """
     Busca publicações no Diário Oficial da União (DOU) filtrando por termo, data e seção.

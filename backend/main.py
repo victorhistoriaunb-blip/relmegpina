@@ -1,7 +1,11 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
+from rate_limit import limiter
 from routers import (
     deputados,
     proposicoes,
@@ -22,15 +26,19 @@ app = FastAPI(
     description="Back-end de monitoramento legislativo e stakeholder intelligence"
 )
 
-# Libera o acesso para o Vite / frontend local e para os deploys configurados.
-# Com allow_credentials=True o wildcard ("*") é rejeitado pelos navegadores,
-# então as origens são sempre uma lista explícita.
+# Rate limiting (slowapi): limite genérico para todas as rotas + limites
+# específicos nas rotas pesadas via @limiter.limit (ver backend/rate_limit.py).
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS restritivo: somente origens explicitamente autorizadas.
+# NUNCA use allow_origins=["*"] em produção (invalida cookies/credentials).
+# O domínio de produção e o ambiente local do Vite são fixos; origens extras
+# podem ser adicionadas via variável de ambiente RELMEG_CORS_ORIGINS.
 origens_padrao = [
+    "https://relmegpina.vercel.app",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "http://localhost:4173",
-    "http://127.0.0.1:8000",
-    "http://localhost:3000",
 ]
 origens_configuradas = [
     origem.strip()
@@ -39,11 +47,17 @@ origens_configuradas = [
 ]
 allow_origins = [*origens_padrao, *origens_configuradas]
 
+# Ordem dos middlewares: Starlette empilha de trás para frente, então a CORS
+# é adicionada por último para ficar como a camada mais externa (respostas 429
+# e erros também recebem os cabeçalhos CORS corretos).
+app.add_middleware(
+    SlowAPIMiddleware,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -64,5 +78,6 @@ app.include_router(fachada.router)
 app.include_router(planilha.router)
 
 @app.get("/")
-def home():
+@limiter.limit("60/minute")
+async def home(request: Request):
     return {"status": "ok", "mensagem": "Bem-vindo ao back-end do RelMeg modularizado!"}

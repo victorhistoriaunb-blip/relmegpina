@@ -4,8 +4,12 @@ Módulo de Inteligência Eleitoral (TSE — DivulgaCandContas).
 Consulta candidaturas e o detalhamento patrimonial dos candidatos
 usando a API aberta do Tribunal Superior Eleitoral de forma assíncrona (httpx).
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
+from starlette.requests import Request
+from typing import Optional
 import httpx
+
+from rate_limit import limiter, LIMITE_TSE
 
 router = APIRouter(prefix="/tse", tags=["TSE"])
 
@@ -84,11 +88,13 @@ async def _get_json(url: str) -> dict:
 
 
 @router.get("/candidatos")
+@limiter.limit(LIMITE_TSE)
 async def listar_candidatos(
-    ano: int = Query(..., description="Ano eleitoral: 2024, 2022 ou 2020"),
-    uf: str = Query(..., description="Sigla da UF (2 letras) ou BR"),
-    codigo_cargo: int = Query(..., description="Código do cargo (1, 3, 5, 6, 7, 11, 13)"),
-    q: Optional[str] = Query(None, description="Termo livre para filtrar por nome de urna, nome completo ou partido"),
+    request: Request,
+    ano: int = Query(..., description="Ano eleitoral: 2024, 2022 ou 2020", ge=2020, le=2030),
+    uf: str = Query(..., min_length=2, max_length=2, description="Sigla da UF (2 letras) ou BR"),
+    codigo_cargo: int = Query(..., ge=1, le=13, description="Código do cargo (1, 3, 5, 6, 7, 11, 13)"),
+    q: Optional[str] = Query(None, max_length=120, description="Termo livre para filtrar por nome de urna, nome completo ou partido"),
 ):
     """Lista candidatos de uma eleição com base em ano, UF, cargo e termo opcional."""
     uf = _validar_uf(uf)
@@ -130,10 +136,12 @@ async def listar_candidatos(
 
 
 @router.get("/candidato/{ano}/{uf}/{id_candidato}")
+@limiter.limit(LIMITE_TSE)
 async def detalhe_candidato(
-    ano: int,
-    uf: str,
-    id_candidato: int,
+    request: Request,
+    ano: int = Path(..., ge=2020, le=2030),
+    uf: str = Path(..., min_length=2, max_length=2),
+    id_candidato: int = Path(..., ge=1),
 ):
     """Detalha um candidato, incluindo dados pessoais, eleição e patrimônio declarado."""
     uf = _validar_uf(uf)
