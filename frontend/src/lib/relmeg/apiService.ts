@@ -36,12 +36,12 @@ export async function getSenadoComissoes() {
   return await fetchApi("/senado/comissoes");
 }
 
-export async function getDOU() {
-  return await fetchApi("/dou/");
+export async function getDOU(q: string = "energia elétrica") {
+  return await fetchApi(`/dou/pesquisa?q=${encodeURIComponent(q)}`);
 }
 
 export async function getMonitoramento() {
-  return await fetchApi("/monitoramento/");
+  return await fetchApi("/monitoramento/camara");
 }
 
 export interface ResumirDouPayload {

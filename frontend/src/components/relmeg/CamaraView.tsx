@@ -78,6 +78,7 @@ export function CamaraView() {
       data={dadosCamara}
       loading={recarregando}
       onRefresh={atualizarBase}
+      autoCarregarVazio
       selecionavel
       onAdicionarAoMonitoramento={adicionarAoMonitoramento}
       columns={[

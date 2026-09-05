@@ -1,11 +1,27 @@
-import { useState, useMemo, useEffect } from "react";
-import { Search, Filter, RefreshCw, X, Pin, Send, Loader2 } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import {
+  Search,
+  Filter,
+  RefreshCw,
+  X,
+  Pin,
+  Send,
+  Loader2,
+  Table2,
+  LayoutGrid,
+  FileSpreadsheet,
+  FileDown,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useRelmeg, setFilter } from "@/lib/relmeg/store";
+import { useRelmeg, setFilter, toggleFavorito, editarParlamentar } from "@/lib/relmeg/store";
 import { useDebouncedValue } from "@/lib/relmeg/useDebounce";
+import { CardsGrid, type CardExecutivoAcoes } from "./CardsExecutivos";
+import { exportarCSV, exportarXLSX } from "@/lib/relmeg/export";
+import { tituloProposicao } from "@/lib/relmeg/clipping";
 
 interface Column {
   key: string;
@@ -24,9 +40,12 @@ interface GenericDataViewProps {
   selecionavel?: boolean;
   onAdicionarAoMonitoramento?: (itens: any[]) => void;
   onExportarClipping?: (itens: any[]) => void;
+  autoCarregarVazio?: boolean;
 }
 
 const OPCOES_POR_PAGINA = [20, 50] as const;
+const OPCOES_VISAO = ["tabela", "cards"] as const;
+type Visao = (typeof OPCOES_VISAO)[number];
 
 export function GenericDataView({
   titulo,
@@ -39,8 +58,9 @@ export function GenericDataView({
   selecionavel,
   onAdicionarAoMonitoramento,
   onExportarClipping,
+  autoCarregarVazio = false,
 }: GenericDataViewProps) {
-  const { filters } = useRelmeg();
+  const { filters, favoritos } = useRelmeg();
   const busca = filters?.busca ?? "";
   const buscaFiltrada = useDebouncedValue(busca, 500);
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
@@ -49,6 +69,34 @@ export function GenericDataView({
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [porPagina, setPorPagina] = useState<number>(OPCOES_POR_PAGINA[0]);
+  const [visao, setVisao] = useState<Visao>(OPCOES_VISAO[0]);
+  const autoLoadFeito = useRef(false);
+
+  useEffect(() => {
+    if (autoCarregarVazio && data.length === 0 && !loading && onRefresh && !autoLoadFeito.current) {
+      autoLoadFeito.current = true;
+      void onRefresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCarregarVazio, data.length, loading]);
+
+  useEffect(() => {
+    autoLoadFeito.current = false;
+  }, [titulo]);
+
+  const acoesCards = useMemo<CardExecutivoAcoes>(
+    () => ({
+      onToggleFavorito: (id) => toggleFavorito(id),
+      onVerDetalhes: onRowClick,
+      onAnexarNota: (item, nota) => {
+        if (!item?.id) return;
+        editarParlamentar(String(item.id), { anotacoes: nota });
+        toast.success(`Nota anexada a "${tituloProposicao(item)}"`);
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onRowClick],
+  );
 
   const dadosFiltrados = useMemo(() => {
     return data.filter((item) => {
@@ -216,6 +264,57 @@ export function GenericDataView({
         </div>
       )}
 
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-secondary/30 p-1">
+          {OPCOES_VISAO.map((opcao) => (
+            <button
+              key={opcao}
+              type="button"
+              onClick={() => setVisao(opcao)}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                visao === opcao
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {opcao === "tabela" ? (
+                <Table2 className="h-3.5 w-3.5" />
+              ) : (
+                <LayoutGrid className="h-3.5 w-3.5" />
+              )}
+              {opcao === "tabela" ? "Tabela" : "Cards Executivos"}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              exportarCSV(dadosFiltrados, titulo);
+              toast.success("CSV exportado com sucesso.");
+            }}
+            disabled={dadosFiltrados.length === 0}
+          >
+            <FileDown className="h-4 w-4" /> CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              exportarXLSX(dadosFiltrados, titulo);
+              toast.success("Planilha XLSX exportada com sucesso.");
+            }}
+            disabled={dadosFiltrados.length === 0}
+          >
+            <FileSpreadsheet className="h-4 w-4" /> XLSX
+          </Button>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>
           Mostrando {dadosFiltrados.length} de {data.length} registros no recorte
@@ -225,88 +324,100 @@ export function GenericDataView({
         )}
       </div>
 
-      <div className="rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border/70 bg-secondary/40 text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                {selecionavel && (
-                  <th className="w-14 px-4 py-3 font-medium">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={todosSelecionados || (algumSelecionado ? "indeterminate" : false)}
-                        onCheckedChange={alternarTodos}
-                        disabled={dadosFiltrados.length === 0}
-                        aria-label="Selecionar todas"
-                        title="Selecionar todas"
-                      />
-                    </div>
-                  </th>
-                )}
-                {columns.map((col) => (
-                  <th key={col.key} className="px-4 py-3 font-medium">
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {loading ? (
-                Array.from({ length: 6 }).map((_, linha) => (
-                  <tr key={`skeleton-${linha}`} aria-hidden="true">
-                    <td colSpan={colSpan} className="px-4 py-3">
-                      <Skeleton className="h-8 w-full" />
+      {visao === "tabela" ? (
+        <div className="rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-border/70 bg-secondary/40 text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  {selecionavel && (
+                    <th className="w-14 px-4 py-3 font-medium">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={todosSelecionados || (algumSelecionado ? "indeterminate" : false)}
+                          onCheckedChange={alternarTodos}
+                          disabled={dadosFiltrados.length === 0}
+                          aria-label="Selecionar todas"
+                          title="Selecionar todas"
+                        />
+                      </div>
+                    </th>
+                  )}
+                  {columns.map((col) => (
+                    <th key={col.key} className="px-4 py-3 font-medium">
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {loading ? (
+                  Array.from({ length: 6 }).map((_, linha) => (
+                    <tr key={`skeleton-${linha}`} aria-hidden="true">
+                      <td colSpan={colSpan} className="px-4 py-3">
+                        <Skeleton className="h-8 w-full" />
+                      </td>
+                    </tr>
+                  ))
+                ) : dadosPagina.length === 0 ? (
+                  <tr>
+                    <td colSpan={colSpan} className="px-4 py-8 text-center text-muted-foreground">
+                      Nenhum registro encontrado para esta consulta.
                     </td>
                   </tr>
-                ))
-              ) : dadosPagina.length === 0 ? (
-                <tr>
-                  <td colSpan={colSpan} className="px-4 py-8 text-center text-muted-foreground">
-                    Nenhum registro encontrado para esta consulta.
-                  </td>
-                </tr>
-              ) : (
-                dadosPagina.map((item, idx) => {
-                  const id = idDe(item);
-                  return (
-                    <tr
-                      key={id || `row-${idx}`}
-                      onClick={() => onRowClick?.(item)}
-                      className={`transition-colors ${
-                        onRowClick ? "cursor-pointer" : ""
-                      } ${
-                        selecionavel && selecionadas.has(id)
-                          ? "bg-primary/5 hover:bg-primary/10"
-                          : "hover:bg-secondary/30"
-                      }`}
-                    >
-                      {selecionavel && (
-                        <td className="px-4 py-3">
-                          <Checkbox
-                            checked={selecionadas.has(id)}
-                            onCheckedChange={() => alternarItem(id)}
-                            aria-label={`Selecionar ${columns[0]?.key ? String(item[columns[0].key] ?? "") : ""}`}
-                          />
-                        </td>
-                      )}
-                      {columns.map((col) => (
-                        <td
-                          key={col.key}
-                          className="whitespace-normal break-words px-4 py-3 align-top text-foreground/90"
-                        >
-                          {col.render ? col.render(item) : String(item[col.key] ?? "-")}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  dadosPagina.map((item, idx) => {
+                    const id = idDe(item);
+                    return (
+                      <tr
+                        key={id || `row-${idx}`}
+                        onClick={() => onRowClick?.(item)}
+                        className={`transition-colors ${
+                          onRowClick ? "cursor-pointer" : ""
+                        } ${
+                          selecionavel && selecionadas.has(id)
+                            ? "bg-primary/5 hover:bg-primary/10"
+                            : "hover:bg-secondary/30"
+                        }`}
+                      >
+                        {selecionavel && (
+                          <td className="px-4 py-3">
+                            <Checkbox
+                              checked={selecionadas.has(id)}
+                              onCheckedChange={() => alternarItem(id)}
+                              aria-label={`Selecionar ${columns[0]?.key ? String(item[columns[0].key] ?? "") : ""}`}
+                            />
+                          </td>
+                        )}
+                        {columns.map((col) => (
+                          <td
+                            key={col.key}
+                            className="whitespace-normal break-words px-4 py-3 align-top text-foreground/90"
+                          >
+                            {col.render ? col.render(item) : String(item[col.key] ?? "-")}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
+      ) : (
+        <CardsGrid
+          data={dadosPagina}
+          loading={loading}
+          favoritos={favoritos}
+          indiceInicial={inicio}
+          acoes={acoesCards}
+        />
+      )}
 
-        {!loading && dadosFiltrados.length > 0 && (
-          <div className="flex flex-col gap-3 border-t border-border/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      {!loading && dadosFiltrados.length > 0 && (
+        <div className="rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden">
+          <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>Itens por página:</span>
               <select
@@ -347,8 +458,8 @@ export function GenericDataView({
               </Button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {selecionavel &&
         (onAdicionarAoMonitoramento || onExportarClipping) &&

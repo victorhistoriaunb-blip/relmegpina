@@ -80,6 +80,7 @@ export function SenadoView() {
       data={dadosSenado}
       loading={recarregando}
       onRefresh={atualizarBase}
+      autoCarregarVazio
       selecionavel
       onAdicionarAoMonitoramento={adicionarAoMonitoramento}
       columns={[

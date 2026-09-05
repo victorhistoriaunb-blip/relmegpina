@@ -1,6 +1,6 @@
 ﻿import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { Parlamentar, Filters, EMPTY_FILTERS } from "./types";
+import { Parlamentar, Filters, EMPTY_FILTERS, ClienteDef, Anexo, CLIENTES_DEFAULT } from "./types";
 import { inserirParlamentares, usuarioIdSupabase } from "./cloud";
 import { cargoLabel, type TseCandidato } from "./tse";
 
@@ -40,6 +40,18 @@ interface RelmegState {
   estaAutenticado: boolean;
   textos: Record<string, string>;
   prefs: RelmegPrefs;
+
+  clientes: ClienteDef[];
+  clienteAtivo: string;
+  favoritos: string[];
+  anexos: Anexo[];
+
+  setClienteAtivo: (key: string) => void;
+  adicionarCliente: (cliente: ClienteDef) => void;
+  removerCliente: (key: string) => void;
+  toggleFavorito: (id: string) => void;
+  adicionarAnexo: (anexo: Omit<Anexo, "id" | "data">) => void;
+  removerAnexo: (id: string) => void;
 
   addItem: (item: Partial<RelmegItem>) => RelmegItem;
   removeItem: (id: string) => void;
@@ -146,6 +158,48 @@ export const useRelmeg = create<RelmegState>()(
       estaAutenticado: true,
       textos: {},
       prefs: prefsIniciais,
+
+      clientes: CLIENTES_DEFAULT,
+      clienteAtivo: "todos",
+      favoritos: [],
+      anexos: [],
+
+      setClienteAtivo: (key) => set({ clienteAtivo: key }),
+
+      adicionarCliente: (cliente) =>
+        set((state) => ({
+          clientes: state.clientes.some((c) => c.key === cliente.key)
+            ? state.clientes
+            : [...state.clientes, cliente],
+        })),
+
+      removerCliente: (key) =>
+        set((state) => ({
+          clientes: state.clientes.filter((c) => c.key !== key),
+          clienteAtivo: state.clienteAtivo === key ? "todos" : state.clienteAtivo,
+        })),
+
+      toggleFavorito: (id) =>
+        set((state) => ({
+          favoritos: state.favoritos.includes(id)
+            ? state.favoritos.filter((f) => f !== id)
+            : [...state.favoritos, id],
+        })),
+
+      adicionarAnexo: (anexo) =>
+        set((state) => ({
+          anexos: [
+            {
+              ...anexo,
+              id: `anexo-${Math.random().toString(36).substring(2, 9)}`,
+              data: new Date().toISOString(),
+            },
+            ...state.anexos,
+          ],
+        })),
+
+      removerAnexo: (id) =>
+        set((state) => ({ anexos: state.anexos.filter((a) => a.id !== id) })),
 
       addItem: (newItem) => {
         const itemCompleto: RelmegItem = {
@@ -387,3 +441,15 @@ export const iniciarSessao = (usuario?: any) => useRelmeg.getState().iniciarSess
 export const encerrarSessao = () => useRelmeg.getState().encerrarSessao();
 export const login = () => useRelmeg.getState().login();
 export const logout = () => useRelmeg.getState().logout();
+export const setClienteAtivo = (key: string) => useRelmeg.getState().setClienteAtivo(key);
+export const adicionarCliente = (cliente: ClienteDef) =>
+  useRelmeg.getState().adicionarCliente(cliente);
+export const removerCliente = (key: string) => useRelmeg.getState().removerCliente(key);
+export const toggleFavorito = (id: string) => useRelmeg.getState().toggleFavorito(id);
+export const adicionarAnexo = (anexo: Omit<Anexo, "id" | "data">) =>
+  useRelmeg.getState().adicionarAnexo(anexo);
+export const removerAnexo = (id: string) => useRelmeg.getState().removerAnexo(id);
+export function rotuloCliente(key: string): string {
+  const cliente = useRelmeg.getState().clientes.find((c) => c.key === key);
+  return cliente?.label ?? key;
+}

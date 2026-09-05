@@ -8,6 +8,8 @@ import {
   LogOut,
   UploadCloud,
   RotateCcw,
+  Paperclip,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,9 @@ import {
   substituirBase,
   setTexto,
   useRelmeg,
+  adicionarAnexo,
+  removerAnexo,
+  rotuloCliente,
 } from "@/lib/relmeg/store";
 import { CAMPOS_TEXTO } from "@/lib/relmeg/textos";
 import {
@@ -63,10 +68,11 @@ export const Route = createFileRoute("/admin")({
 });
 
 function Painel() {
-  const { data, textos } = useRelmeg();
+  const { data, textos, anexos, clienteAtivo } = useRelmeg();
   const [preview, setPreview] = useState<ParseResult | null>(null);
   const [carregando, setCarregando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const anexoRef = useRef<HTMLInputElement>(null);
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -85,6 +91,42 @@ function Painel() {
       toast.error("Não foi possível ler o arquivo. Use .xlsx ou .csv.");
     } finally {
       setCarregando(false);
+    }
+  }
+
+  async function onAnexo(file: File | undefined) {
+    if (!file) return;
+    const extensao = (file.name || "").split(".")[1]?.toLowerCase() ?? "pdf";
+    if (!["pdf", "xlsx", "xls", "csv"].includes(extensao)) {
+      toast.error("Anexos aceitos: .pdf, .xlsx, .xls e .csv.");
+      return;
+    }
+    setCarregando(true);
+    try {
+      let base64 = "";
+      if (file.size <= 6_000_000) {
+        base64 = await new Promise<string>((resolve, reject) => {
+          const leitor = new FileReader();
+          leitor.onload = () => resolve(String(leitor.result ?? ""));
+          leitor.onerror = () => reject(new Error("Falha ao ler o arquivo."));
+          leitor.readAsDataURL(file);
+        });
+      }
+      adicionarAnexo({
+        cliente: clienteAtivo,
+        nome: file.name,
+        tipo: extensao,
+        tamanhoBytes: file.size,
+        ...(base64 ? { conteudoBase64: base64 } : {}),
+      });
+      toast.success(
+        `Anexo "${file.name}" vinculado ao projeto ${rotuloCliente(clienteAtivo)}.`,
+      );
+    } catch {
+      toast.error("Não foi possível anexar o arquivo.");
+    } finally {
+      setCarregando(false);
+      if (anexoRef.current) anexoRef.current.value = "";
     }
   }
 
@@ -155,6 +197,78 @@ function Painel() {
               {c.label} *
             </Badge>
           ))}
+        </div>
+      </div>
+
+      <div className="panel panel-hover rise-in rounded-xl p-6">
+        <h2 className="font-display text-base font-semibold">Anexos do projeto ativo</h2>
+        <p className="text-sm text-muted-foreground">
+          Vincule documentos (PDF, planilhas e CSV) ao cliente/tema ativo:{" "}
+          <span className="font-medium text-foreground">{rotuloCliente(clienteAtivo)}</span>. São
+          armazenados localmente e podem ser processados pelo backend na etapa de enriquecimento.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Input
+            ref={anexoRef}
+            type="file"
+            accept=".pdf,.xlsx,.xls,.csv"
+            className="max-w-sm"
+            onChange={(e) => onAnexo(e.target.files?.[0])}
+          />
+          {carregando && <span className="text-sm text-muted-foreground">Vinculando…</span>}
+        </div>
+        <div className="mt-4 space-y-2">
+          {anexos.filter((a) => a.cliente === clienteAtivo).length === 0 ? (
+            <p className="rounded-md border border-dashed border-border/60 px-3 py-4 text-center text-xs text-muted-foreground">
+              Nenhum anexo vinculado a este projeto ainda.
+            </p>
+          ) : (
+            anexos
+              .filter((a) => a.cliente === clienteAtivo)
+              .map((anexo) => (
+                <div
+                  key={anexo.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2"
+                >
+                  <div className="flex min-w-0 items-center gap-2 text-sm text-foreground/90">
+                    {anexo.tipo === "pdf" ? (
+                      <Paperclip className="h-4 w-4 shrink-0 text-primary" />
+                    ) : (
+                      <FileText className="h-4 w-4 shrink-0 text-primary" />
+                    )}
+                    <span className="truncate">{anexo.nome}</span>
+                    <Badge variant="outline" className="font-normal text-muted-foreground">
+                      {String(anexo.tipo).toUpperCase()}
+                    </Badge>
+                    {anexo.tamanhoBytes ? (
+                      <span className="text-xs text-muted-foreground">
+                        {(anexo.tamanhoBytes / 1024).toFixed(1)} KB
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {anexo.conteudoBase64 && (
+                      <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                        <a href={anexo.conteudoBase64} download={anexo.nome}>
+                          <Download className="h-4 w-4" /> Baixar
+                        </a>
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        removerAnexo(anexo.id);
+                        toast.success("Anexo removido.");
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" /> Remover
+                    </Button>
+                  </div>
+                </div>
+              ))
+          )}
         </div>
       </div>
 

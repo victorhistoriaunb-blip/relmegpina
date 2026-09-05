@@ -1,5 +1,13 @@
-import { useMemo, useState } from "react";
-import { Sparkles, SquareCheck, Send, Inbox, RefreshCw } from "lucide-react";
+import { useMemo, useState, useEffect, useRef } from "react";
+import {
+  Sparkles,
+  SquareCheck,
+  Send,
+  Inbox,
+  RefreshCw,
+  FileDown,
+  FileSpreadsheet,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useRelmeg } from "@/lib/relmeg/store";
+import { useRelmeg, setClienteAtivo } from "@/lib/relmeg/store";
 import { exportarClippingParaWhatsApp, formatarData, autorComPartido } from "@/lib/relmeg/clipping";
 import { getCamaraResumo, getSenadoResumo } from "@/lib/relmeg/apiService";
+import { exportarCSV, exportarXLSX } from "@/lib/relmeg/export";
 import { toast } from "sonner";
 
 type Casa = "camara" | "senado";
@@ -34,12 +43,12 @@ interface NovaProposicao {
 
 type ClienteKey = "family-talks" | "action" | "energia" | "mercado-de-capitais";
 
-const CLIENTES: { key: ClienteKey; label: string }[] = [
-  { key: "family-talks", label: "Family Talks" },
-  { key: "action", label: "Action" },
-  { key: "energia", label: "Energia" },
-  { key: "mercado-de-capitais", label: "Mercado de Capitais" },
-];
+const CLIENTES_DISPONIVEIS: Record<ClienteKey, string> = {
+  "family-talks": "Family Talks",
+  action: "Action",
+  energia: "Energia",
+  "mercado-de-capitais": "Mercado de Capitais",
+};
 
 const TITULO_CASA: Record<Casa, string> = {
   camara: "Câmara dos Deputados",
@@ -192,8 +201,8 @@ function converterDaBase(item: any, idx: number): NovaProposicao {
 }
 
 export function NovasProposicoesView() {
-  const { data } = useRelmeg();
-  const [cliente, setCliente] = useState<string>("todos");
+  const { data, clienteAtivo, clientes } = useRelmeg();
+  const cliente = clienteAtivo || "todos";
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [carregando, setCarregando] = useState(false);
 
@@ -208,6 +217,21 @@ export function NovasProposicoesView() {
     () => (cliente === "todos" ? proposicoes : proposicoes.filter((p) => p.cliente === cliente)),
     [proposicoes, cliente],
   );
+
+  const autoLoadFeito = useRef(false);
+
+  useEffect(() => {
+    if (
+      autoLoadFeito.current ||
+      carregando ||
+      data.some((item) => item.categoria === "camara" || item.categoria === "senado")
+    ) {
+      return;
+    }
+    autoLoadFeito.current = true;
+    void atualizarBase();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, carregando]);
 
   const selecionadasLista = useMemo(
     () => proposicoes.filter((p) => selecionadas.has(p.id)),
@@ -301,13 +325,13 @@ export function NovasProposicoesView() {
         <div className="grid flex-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]" >
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Cliente / Tema</label>
-            <Select value={cliente} onValueChange={setCliente}>
+            <Select value={cliente} onValueChange={setClienteAtivo}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Cliente / Tema" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos os Clientes/Temas</SelectItem>
-                {CLIENTES.map((c) => (
+                {clientes.map((c) => (
                   <SelectItem key={c.key} value={c.key}>
                     {c.label}
                   </SelectItem>
@@ -316,6 +340,32 @@ export function NovasProposicoesView() {
             </Select>
           </div>
           <div className="flex items-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                exportarCSV(filtradas as unknown as Record<string, unknown>[], "novas-proposicoes");
+                toast.success("CSV exportado com sucesso.");
+              }}
+              disabled={filtradas.length === 0}
+              className="gap-2"
+            >
+              <FileDown className="h-4 w-4" />
+              <span className="hidden sm:inline">CSV</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                exportarXLSX(filtradas as unknown as Record<string, unknown>[], "novas-proposicoes");
+                toast.success("Planilha XLSX exportada com sucesso.");
+              }}
+              disabled={filtradas.length === 0}
+              className="gap-2"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              <span className="hidden sm:inline">XLSX</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -433,13 +483,7 @@ export function NovasProposicoesView() {
 
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 <Badge variant="secondary" className="font-normal">
-                  {p.cliente === "family-talks"
-                    ? "Family Talks"
-                    : p.cliente === "action"
-                      ? "Action"
-                      : p.cliente === "mercado-de-capitais"
-                        ? "Mercado de Capitais"
-                        : "Energia"}
+                  {CLIENTES_DISPONIVEIS[p.cliente as ClienteKey] ?? "Energia"}
                 </Badge>
                 {p.status && (
                   <Badge variant="outline" className="font-normal text-muted-foreground">

@@ -15,10 +15,17 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/relmeg/AppSidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { LoginScreen } from "@/components/relmeg/LoginScreen";
-import { logout, setFilter, useRelmeg } from "@/lib/relmeg/store";
+import { logout, setFilter, setClienteAtivo, useRelmeg } from "@/lib/relmeg/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LogOut, Search, X } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { LogOut, Search, X, FolderKanban } from "lucide-react";
 
 function NotFoundComponent() {
   return (
@@ -151,7 +158,7 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const { estaAutenticado, usuario, prefs, filters } = useRelmeg();
+  const { estaAutenticado, usuario, prefs, filters, clientes, clienteAtivo } = useRelmeg();
 
   if (!estaAutenticado) {
     return (
@@ -194,6 +201,23 @@ function RootComponent() {
                 )}
               </div>
               <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
+                <Select value={clienteAtivo} onValueChange={setClienteAtivo}>
+                  <SelectTrigger
+                    className="h-9 w-[180px] gap-2 border-border/70"
+                    aria-label="Cliente / Tema ativo"
+                  >
+                    <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <SelectValue placeholder="Cliente / Tema" />
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    <SelectItem value="todos">Todos os Clientes/Temas</SelectItem>
+                    {clientes.map((cliente) => (
+                      <SelectItem key={cliente.key} value={cliente.key}>
+                        {cliente.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {prefs.mostrarSaudacao && (
                   <span className="hidden items-center gap-2 rounded-full border border-border/70 bg-card/60 px-3 py-1 text-xs text-muted-foreground sm:flex">
                     <span className="h-1.5 w-1.5 rounded-full bg-success" />

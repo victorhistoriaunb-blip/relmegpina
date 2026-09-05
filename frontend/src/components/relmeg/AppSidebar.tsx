@@ -46,7 +46,8 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
-  const { data } = useRelmeg();
+  const { data, clientes, clienteAtivo } = useRelmeg();
+  const clienteLabel = clientes.find((c) => c.key === clienteAtivo)?.label ?? "Geral";
 
   return (
     <Sidebar collapsible="icon">
@@ -74,11 +75,19 @@ export function AppSidebar() {
       </SidebarContent>
       {!collapsed && (
         <SidebarFooter className="px-4 pb-4">
-          <div className="rounded-md border border-sidebar-border bg-sidebar-accent/40 p-3">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-              Base ativa
-            </p>
-            <p className="mt-1 font-display text-lg">{data.length} registros</p>
+          <div className="space-y-2">
+            <div className="rounded-md border border-sidebar-border bg-sidebar-accent/40 p-3">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                Cliente / Tema ativo
+              </p>
+              <p className="mt-1 truncate font-display text-sm">{clienteLabel}</p>
+            </div>
+            <div className="rounded-md border border-sidebar-border bg-sidebar-accent/40 p-3">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                Base ativa
+              </p>
+              <p className="mt-1 font-display text-lg">{data.length} registros</p>
+            </div>
           </div>
         </SidebarFooter>
       )}

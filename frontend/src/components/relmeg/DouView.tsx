@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { Sparkles, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Sparkles, Loader2, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { GenericDataView } from "./GenericDataView";
-import { useRelmeg, setFilter } from "@/lib/relmeg/store";
-import { resumirPublicacaoDoDou } from "@/lib/relmeg/apiService";
+import { useRelmeg, setFilter, substituirCategoria } from "@/lib/relmeg/store";
+import { resumirPublicacaoDoDou, getDOU } from "@/lib/relmeg/apiService";
 import { formatarData } from "@/lib/relmeg/clipping";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,47 @@ export function DouView() {
   const [sheetAberto, setSheetAberto] = useState(false);
   const [resumindo, setResumindo] = useState(false);
   const [resumo, setResumo] = useState<string | null>(null);
+  const [termo, setTermo] = useState<string>(FILTROS_RAPIDOS[0].termos);
+  const [varrendo, setVarrendo] = useState(false);
+  const autoVarreduraFeita = useRef(false);
+
+  async function varrer() {
+    if (varrendo) return;
+    setVarrendo(true);
+    try {
+      const resposta = (await getDOU(termo)) as any;
+      const resultados = resposta?.resultados ?? [];
+      if (resultados.length === 0) {
+        toast.info(`Nenhuma publicação encontrada no DOU para "${termo}".`);
+        return;
+      }
+      const itens = resultados.map((r: any, idx: number) => ({
+        id: `dou-${idx}-${String(r.titulo || "").slice(0, 40)}`,
+        categoria: "dou",
+        titulo: String(r.titulo ?? "") || `Publicação ${idx + 1}`,
+        orgao: String(r.orgao ?? "") || "DOU",
+        data: String(r.data_publicacao ?? ""),
+        data_publicacao: String(r.data_publicacao ?? ""),
+        url: r.url ?? undefined,
+        tipo: String(r.tipo ?? "") || "secao1",
+        secao: String(r.tipo ?? "") || "secao1",
+        ementa: String(r.titulo ?? "") || `Publicação relacionada a "${termo}”`,
+      }));
+      substituirCategoria("dou", itens);
+      toast.success(`${itens.length} publicações encontradas e carregadas do DOU.`);
+    } catch {
+      toast.error("Não foi possível consultar o DOU. Tente novamente em instantes.");
+    } finally {
+      setVarrendo(false);
+    }
+  }
+
+  useEffect(() => {
+    if (autoVarreduraFeita.current || varrendo || dadosDou.length > 0) return;
+    autoVarreduraFeita.current = true;
+    void varrer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosDou.length, varrendo]);
 
   function ativarFiltro(termos: string) {
     const rotulo = FILTROS_RAPIDOS.find((f) => f.termos === termos)?.label ?? "Filtro rápido";
@@ -104,17 +146,42 @@ export function DouView() {
             <button
               key={filtro.label}
               type="button"
-              onClick={() => ativarFiltro(filtro.termos)}
+              onClick={() => {
+                setTermo(filtro.termos);
+                ativarFiltro(filtro.termos);
+              }}
               className="rounded-full border border-border/70 bg-secondary/30 px-3 py-1.5 text-xs font-medium text-foreground/90 transition-colors hover:border-primary/50 hover:bg-primary/10"
             >
               {filtro.label}
             </button>
           ))}
         </div>
-        {dadosDou.length === 0 && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={termo}
+              onChange={(e) => setTermo(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void varrer();
+              }}
+              placeholder="Termo de busca no DOU (ex.: energia elétrica, CVM, logística)"
+              className="pl-9"
+            />
+          </div>
+          <Button onClick={() => void varrer()} disabled={varrendo || !termo.trim()} className="gap-2">
+            {varrendo ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {varrendo ? "Buscando…" : "Buscar no DOU"}
+          </Button>
+        </div>
+        {dadosDou.length === 0 && !varrendo && (
           <p className="text-xs text-muted-foreground">
-            Nenhuma publicação importada até o momento. Os filtros rápidos preenchem a busca — ao
-            importar publicações do seu recorte, abra uma linha para gerar o resumo com IA.
+            Nenhuma publicação carregada ainda. Clique em "Buscar no DOU" para puxar os atos do seu
+            recorte — ao abrir uma linha, gere o resumo com IA.
           </p>
         )}
       </div>
@@ -123,6 +190,7 @@ export function DouView() {
         titulo="Publicações do DOU"
         subtitulo="Atos e normativos do seu recorte de acompanhamento."
         data={dadosDou}
+        loading={varrendo}
         onRowClick={abrirPublicacao}
         columns={[
           {

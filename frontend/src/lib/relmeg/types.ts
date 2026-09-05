@@ -1,5 +1,31 @@
 export type Proposicao = { numero: string; ementa: string; link: string };
 
+export type ClienteKey = "family-talks" | "action" | "energia" | "mercado-de-capitais";
+
+export interface ClienteDef {
+  key: string;
+  label: string;
+  temas?: string[];
+}
+
+export interface Anexo {
+  id: string;
+  cliente: string;
+  nome: string;
+  tipo: "pdf" | "xlsx" | "csv" | string;
+  tamanhoBytes?: number;
+  data: string;
+  url?: string;
+  conteudoBase64?: string;
+}
+
+export const CLIENTES_DEFAULT: ClienteDef[] = [
+  { key: "family-talks", label: "Family Talks", temas: ["Infância", "Família", "Proteção de dados"] },
+  { key: "action", label: "Action", temas: ["Desastres", "Pronta resposta", "Defesa civil"] },
+  { key: "energia", label: "Energia", temas: ["Energia", "Setor elétrico", "ANEEL"] },
+  { key: "mercado-de-capitais", label: "Mercado de Capitais", temas: ["CVM", "Data centers", "Fintech"] },
+];
+
 export type Parlamentar = {
   id: string;
   nome: string;
