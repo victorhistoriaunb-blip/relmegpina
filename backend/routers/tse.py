@@ -88,8 +88,9 @@ async def listar_candidatos(
     ano: int = Query(..., description="Ano eleitoral: 2024, 2022 ou 2020"),
     uf: str = Query(..., description="Sigla da UF (2 letras) ou BR"),
     codigo_cargo: int = Query(..., description="Código do cargo (1, 3, 5, 6, 7, 11, 13)"),
+    q: Optional[str] = Query(None, description="Termo livre para filtrar por nome de urna, nome completo ou partido"),
 ):
-    """Lista candidatos de uma eleição com base em ano, UF e cargo."""
+    """Lista candidatos de uma eleição com base em ano, UF, cargo e termo opcional."""
     uf = _validar_uf(uf)
     id_eleicao = _id_eleicao(ano)
     _validar_cargo(codigo_cargo)
@@ -113,6 +114,17 @@ async def listar_candidatos(
                 "fotoUrl": c.get("fotoUrl"),
             }
         )
+
+    if q:
+        termo = q.strip().lower()
+        if termo:
+            candidatos = [
+                c for c in candidatos
+                if termo in (c.get("nomeUrna") or "").lower()
+                or termo in (c.get("nomeCompleto") or "").lower()
+                or termo in (c.get("siglaPartido") or "").lower()
+                or termo == str(c.get("numero") or "").lower()
+            ]
 
     return {"total": len(candidatos), "candidatos": candidatos}
 

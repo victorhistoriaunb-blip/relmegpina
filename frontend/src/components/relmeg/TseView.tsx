@@ -1,7 +1,18 @@
-import { useMemo, useState } from "react";
-import { Search, Loader2, Pin, Vote, Inbox } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Search,
+  Loader2,
+  Pin,
+  Vote,
+  Inbox,
+  LayoutGrid,
+  Table2,
+  FileDown,
+  FileSpreadsheet,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -27,6 +38,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CardsGrid } from "./CardsExecutivos";
 import {
   ANOS_ELEITORAIS,
   UFS,
@@ -38,20 +50,28 @@ import {
   listarCandidatosTSE,
 } from "@/lib/relmeg/tse";
 import type { TseCandidato, TseCandidatoDetalhe } from "@/lib/relmeg/tse";
-import { salvarCandidatosNoMonitoramento } from "@/lib/relmeg/store";
+import { salvarCandidatosNoMonitoramento, toggleFavorito, useRelmeg } from "@/lib/relmeg/store";
+import { exportarCSV, exportarXLSX } from "@/lib/relmeg/export";
 
 const OPCOES_POR_PAGINA = [20, 50] as const;
+const OPCOES_VISAO = ["tabela", "cards"] as const;
+type Visao = (typeof OPCOES_VISAO)[number];
 
 export function TseView() {
+  const { favoritos } = useRelmeg();
   const [ano, setAno] = useState<number>(2024);
   const [uf, setUf] = useState<string>("BR");
   const [codigoCargo, setCodigoCargo] = useState<number>(11);
+  const [termo, setTermo] = useState("");
   const [candidatos, setCandidatos] = useState<TseCandidato[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [selecionadas, setSelecionadas] = useState<Set<number>>(new Set());
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [porPagina, setPorPagina] = useState<number>(OPCOES_POR_PAGINA[0]);
+  const [visao, setVisao] = useState<Visao>(OPCOES_VISAO[0]);
+  const [erroInformado, setErroInformado] = useState<string | null>(null);
+  const autoCarregado = useRef(false);
 
   const [sheetAberto, setSheetAberto] = useState(false);
   const [alvoDetalhe, setAlvoDetalhe] = useState<TseCandidato | null>(null);
@@ -64,6 +84,33 @@ export function TseView() {
     () => candidatos.filter((c) => selecionadas.has(c.id)),
     [candidatos, selecionadas],
   );
+
+  const candidatosCards = useMemo(
+    () =>
+      candidatos.map((c) => ({
+        ...c,
+        titulo: c.nomeUrna || c.nomeCompleto || "Candidato",
+        ementa: [
+          `Candidato a ${cargoLabel(c.codigoCargo)}`,
+          c.nomeCompleto && c.nomeCompleto !== c.nomeUrna ? c.nomeCompleto : "",
+        ]
+          .filter(Boolean)
+          .join(" — "),
+        autor: c.nomeUrna || c.nomeCompleto || "",
+        partido: c.siglaPartido ?? "",
+        uf: c.uf,
+        status: c.descricaoSituacao ?? "",
+        data: "",
+      })),
+    [candidatos],
+  );
+
+  useEffect(() => {
+    if (autoCarregado.current || carregando || candidatos.length > 0) return;
+    autoCarregado.current = true;
+    void buscarCandidatos(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidatos.length, carregando]);
 
   const totalPaginas = Math.max(1, Math.ceil(candidatos.length / porPagina));
   const paginaAtualSegura = Math.min(Math.max(1, paginaAtual), totalPaginas);
@@ -102,20 +149,22 @@ export function TseView() {
     });
   }
 
-  async function buscarCandidatos() {
+  async function buscarCandidatos(silencioso = false) {
     setCarregando(true);
     setSelecionadas(new Set());
     setPaginaAtual(1);
+    setErroInformado(null);
     try {
-      const lista = await listarCandidatosTSE(ano, uf, codigoCargo);
+      const lista = await listarCandidatosTSE(ano, uf, codigoCargo, termo);
       setCandidatos(lista);
-      if (lista.length === 0) {
+      if (lista.length === 0 && !silencioso) {
         toast.info("Nenhum candidato encontrado para os filtros selecionados.");
       }
     } catch (erro) {
       const msg = erro instanceof Error ? erro.message : "Não foi possível consultar o TSE.";
-      toast.error(msg);
       setCandidatos([]);
+      setErroInformado(msg);
+      if (!silencioso) toast.error(msg);
     } finally {
       setCarregando(false);
     }
@@ -172,7 +221,7 @@ export function TseView() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm lg:flex-row lg:items-end">
+      <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
         <div className="grid flex-1 gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Ano</label>
@@ -223,11 +272,91 @@ export function TseView() {
           </div>
         </div>
 
-        <Button onClick={buscarCandidatos} disabled={carregando} className="gap-2 lg:self-end">
-          {carregando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-          {carregando ? "Pesquisando…" : "Pesquisar Candidatos"}
-        </Button>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={termo}
+              onChange={(e) => setTermo(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void buscarCandidatos();
+              }}
+              placeholder="Filtrar por nome de urna, nome completo ou partido…"
+              className="pl-9"
+              aria-label="Filtrar por nome ou partido"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-secondary/30 p-1">
+              {OPCOES_VISAO.map((opcao) => (
+                <button
+                  key={opcao}
+                  type="button"
+                  onClick={() => setVisao(opcao)}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    visao === opcao
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {opcao === "tabela" ? (
+                    <Table2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                  )}
+                  {opcao === "tabela" ? "Tabela" : "Cards"}
+                </button>
+              ))}
+            </div>
+            <Button onClick={() => void buscarCandidatos()} disabled={carregando} className="gap-2">
+              {carregando ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+              {carregando ? "Pesquisando…" : "Pesquisar"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => {
+                exportarCSV(candidatos as unknown as Record<string, unknown>[], "tse-candidatos");
+                toast.success("CSV dos candidatos exportado.");
+              }}
+              disabled={candidatos.length === 0}
+            >
+              <FileDown className="h-4 w-4" /> CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => {
+                exportarXLSX(candidatos as unknown as Record<string, unknown>[], "tse-candidatos");
+                toast.success("Planilha dos candidatos exportada.");
+              }}
+              disabled={candidatos.length === 0}
+            >
+              <FileSpreadsheet className="h-4 w-4" /> XLSX
+            </Button>
+          </div>
+        </div>
       </div>
+
+      {erroInformado && candidatos.length === 0 && (
+        <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground/90">
+          <span className="font-medium">Falha na consulta ao TSE:</span> {erroInformado}{" "}
+          <button
+            type="button"
+            className="ml-1 font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+            onClick={() => void buscarCandidatos()}
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
 
       {carregando ? (
         <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
@@ -272,11 +401,21 @@ export function TseView() {
       ) : candidatos.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-card/50 px-4 py-14 text-center">
           <Inbox className="h-8 w-8 text-muted-foreground/50" />
-          <p className="text-sm font-medium text-foreground">Nenhuma consulta realizada</p>
+          <p className="text-sm font-medium text-foreground">Nenhuma candidatura encontrada</p>
           <p className="max-w-sm text-xs text-muted-foreground">
-            Escolha ano, UF e cargo e clique em "Pesquisar Candidatos" para listar as candidaturas.
+            A base é carregada automaticamente ao abrir a aba. Ajuste ano, UF, cargo ou o termo de
+            busca e clique em "Pesquisar".
           </p>
         </div>
+      ) : visao === "cards" ? (
+        <CardsGrid
+          data={candidatosCards}
+          favoritos={favoritos}
+          acoes={{
+            onToggleFavorito: (id) => toggleFavorito(id),
+            onVerDetalhes: abrirDossie,
+          }}
+        />
       ) : (
         <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
           <div className="overflow-x-auto">

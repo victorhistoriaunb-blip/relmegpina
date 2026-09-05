@@ -7,7 +7,7 @@ import { titularLimpo } from "./AutorBadge";
 import { getCamaraResumo } from "@/lib/relmeg/apiService";
 
 export function CamaraView() {
-  const { data, addItem } = useRelmeg();
+  const { data, addItem, filters } = useRelmeg();
   const [recarregando, setRecarregando] = useState(false);
   const dadosCamara = data.filter((item) => item.categoria === "camara");
   const perfis = useMemo(() => data.filter((item) => item.nome), [data]);
@@ -16,7 +16,7 @@ export function CamaraView() {
   const atualizarBase = async () => {
     setRecarregando(true);
     try {
-      const resposta = (await getCamaraResumo()) as any;
+      const resposta = (await getCamaraResumo(filters.busca)) as any;
       const proposicoes = resposta?.proposicoes ?? [];
       if (proposicoes.length === 0) {
         toast.info("Nenhuma proposição retornada pela API da Câmara.");

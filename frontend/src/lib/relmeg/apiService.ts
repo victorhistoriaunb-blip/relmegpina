@@ -16,8 +16,9 @@ export async function getCamaraProposicoes(itens: number = 10) {
   return await fetchApi(`/proposicoes/?itens=${itens}`);
 }
 
-export async function getCamaraResumo() {
-  return await fetchApi("/api/camara");
+export async function getCamaraResumo(keywords?: string) {
+  const q = keywords?.trim() ? `?keywords=${encodeURIComponent(keywords.trim())}` : "";
+  return await fetchApi(`/api/camara${q}`);
 }
 
 export async function getCamaraDeputados() {
@@ -28,8 +29,9 @@ export async function getSenadoMaterias() {
   return await fetchApi("/senado/materias");
 }
 
-export async function getSenadoResumo() {
-  return await fetchApi("/api/senado");
+export async function getSenadoResumo(keywords?: string) {
+  const q = keywords?.trim() ? `&keywords=${encodeURIComponent(keywords.trim())}` : "";
+  return await fetchApi(`/api/senado?tramitando=S${q}`);
 }
 
 export async function getSenadoComissoes() {

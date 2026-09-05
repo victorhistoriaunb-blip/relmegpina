@@ -31,11 +31,13 @@ async def senado_resumo(
     sigla: Optional[str] = Query(None, description="Ex: PEC, PL, PRS"),
     ano: Optional[int] = Query(None),
     tramitando: Optional[str] = Query("S"),
+    keywords: Optional[str] = Query(None),
 ):
     """Versão 'camada de visualização' das matérias do Senado."""
     return await listar_materias_senado(
         sigla=sigla,
         ano=ano,
         tramitando=tramitando,
+        keywords=keywords,
         enriquecer=True,
     )

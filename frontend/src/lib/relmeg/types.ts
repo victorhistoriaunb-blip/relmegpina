@@ -1,6 +1,6 @@
 export type Proposicao = { numero: string; ementa: string; link: string };
 
-export type ClienteKey = "family-talks" | "action" | "energia" | "mercado-de-capitais";
+export type ClienteKey = "abradee" | "abeeolica" | "ifood" | "energia";
 
 export interface ClienteDef {
   key: string;
@@ -20,10 +20,22 @@ export interface Anexo {
 }
 
 export const CLIENTES_DEFAULT: ClienteDef[] = [
-  { key: "family-talks", label: "Family Talks", temas: ["Infância", "Família", "Proteção de dados"] },
-  { key: "action", label: "Action", temas: ["Desastres", "Pronta resposta", "Defesa civil"] },
-  { key: "energia", label: "Energia", temas: ["Energia", "Setor elétrico", "ANEEL"] },
-  { key: "mercado-de-capitais", label: "Mercado de Capitais", temas: ["CVM", "Data centers", "Fintech"] },
+  {
+    key: "abradee",
+    label: "ABRADEE",
+    temas: ["Distribuição de energia", "ANEEL", "Tarifas", "Setor elétrico"],
+  },
+  {
+    key: "abeeolica",
+    label: "ABEEólica",
+    temas: ["Eólica", "Renováveis", "Leilões de energia", "Hidrogênio verde"],
+  },
+  {
+    key: "ifood",
+    label: "iFood",
+    temas: ["Entregas", "Plataformas digitais", "Proteção de dados", "Segurança alimentar"],
+  },
+  { key: "energia", label: "Tema Energia", temas: ["Energia", "Setor elétrico", "ANEEL"] },
 ];
 
 export type Parlamentar = {

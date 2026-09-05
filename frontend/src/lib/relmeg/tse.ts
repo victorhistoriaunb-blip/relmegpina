@@ -195,12 +195,14 @@ export async function listarCandidatosTSE(
   ano: number,
   uf: string,
   codigoCargo: number,
+  termo: string = "",
 ): Promise<TseCandidato[]> {
   const params = new URLSearchParams({
     ano: String(ano),
     uf,
     codigo_cargo: String(codigoCargo),
   });
+  if (termo.trim()) params.set("q", termo.trim());
   const resposta = await fetchJson<RespostaListaCandidatos>(`/api/tse/candidatos?${params.toString()}`);
   return (resposta?.candidatos ?? []).map((c) => ({
     ...c,

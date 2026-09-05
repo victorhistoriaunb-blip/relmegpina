@@ -41,13 +41,13 @@ interface NovaProposicao {
   status?: string;
 }
 
-type ClienteKey = "family-talks" | "action" | "energia" | "mercado-de-capitais";
+type ClienteKey = "abradee" | "abeeolica" | "ifood" | "energia";
 
 const CLIENTES_DISPONIVEIS: Record<ClienteKey, string> = {
-  "family-talks": "Family Talks",
-  action: "Action",
-  energia: "Energia",
-  "mercado-de-capitais": "Mercado de Capitais",
+  abradee: "ABRADEE",
+  abeeolica: "ABEEólica",
+  ifood: "iFood",
+  energia: "Tema Energia",
 };
 
 const TITULO_CASA: Record<Casa, string> = {
@@ -67,7 +67,7 @@ const AMOSTRA: NovaProposicao[] = [
     uf: "PE",
     data: "2026-08-22",
     link: "https://www.camara.leg.br/busca/?q=PL%205149/2026",
-    cliente: "energia",
+    cliente: "abradee",
     status: "Aguardando designação de relator",
   },
   {
@@ -94,7 +94,7 @@ const AMOSTRA: NovaProposicao[] = [
     uf: "SP",
     data: "2026-08-20",
     link: "https://www.camara.leg.br/busca/?q=PL%205209/2026",
-    cliente: "mercado-de-capitais",
+    cliente: "energia",
     status: "Pronto para pauta",
   },
   {
@@ -108,7 +108,7 @@ const AMOSTRA: NovaProposicao[] = [
     uf: "BA",
     data: "2026-08-18",
     link: "https://www.camara.leg.br/busca/?q=PL%205198/2026",
-    cliente: "energia",
+    cliente: "abeeolica",
   },
   {
     id: "np-4555",
@@ -121,7 +121,7 @@ const AMOSTRA: NovaProposicao[] = [
     uf: "RJ",
     data: "2026-07-10",
     link: "https://www.camara.leg.br/busca/?q=PL%204555/2026",
-    cliente: "family-talks",
+    cliente: "ifood",
     status: "Em análise na comissão",
   },
   {
@@ -135,7 +135,7 @@ const AMOSTRA: NovaProposicao[] = [
     uf: "SC",
     data: "2026-06-15",
     link: "https://www.camara.leg.br/busca/?q=PL%204111/2026",
-    cliente: "action",
+    cliente: "energia",
     status: "Aguardando parecer",
   },
   {
@@ -149,7 +149,7 @@ const AMOSTRA: NovaProposicao[] = [
     uf: "AM",
     data: "2026-08-25",
     link: "https://www25.senado.leg.br/web/atividade/materias",
-    cliente: "mercado-de-capitais",
+    cliente: "abradee",
     status: "Comissão de Infraestrutura",
   },
 ];
@@ -157,17 +157,19 @@ const AMOSTRA: NovaProposicao[] = [
 function atribuirCliente(texto: string): ClienteKey {
   const t = (texto || "").toLowerCase();
   if (
-    /(cvm|mercado de capitais|título de capital|ações|bolsa|investimento|fintech|criptoativo|centros de dados|garantias financeiras|poupança)/.test(t)
+    /(eólica|eolica|renovável|renovavel|solar|fotovoltaica|offshore|hidrogênio|hidrog nio|leilão|leilao)/.test(t)
   ) {
-    return "mercado-de-capitais";
+    return "abeeolica";
   }
   if (
-    /(criança|adolescente|família|infância|dados pessoais|idade|educação|socioeduca)/.test(t)
+    /(aneel|rede básica|rede basica|distribuição|distribuicao|tarif|geradora|eletroposto|microgeração|microrregião|elétrica|eletrica|garantias financeiras)/.test(t)
   ) {
-    return "family-talks";
+    return "abradee";
   }
-  if (/(desastre|alerta|emergência|socorro|defesa civil|pronta resposta|vigilância)/.test(t)) {
-    return "action";
+  if (
+    /(entregador|entrega|plataforma digital|aplicativo|proteção de dados|dados pessoais|crianças|adolescente|alimenta|restaurante|delivery)/.test(t)
+  ) {
+    return "ifood";
   }
   return "energia";
 }

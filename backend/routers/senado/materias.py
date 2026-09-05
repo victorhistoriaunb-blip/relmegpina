@@ -89,6 +89,7 @@ async def listar_materias_senado(
     ano: Optional[int] = Query(None, description="Ano da matéria, ex: 2026"),
     tramitando: Optional[str] = Query("S", description="Apenas matérias em tramitação: S ou N"),
     enriquecer: bool = Query(True, description="Se false, retorna apenas os campos básicos (mais rápido)"),
+    keywords: Optional[str] = Query(None, description="Termo livre para filtrar por ementa ou autor"),
 ):
     """Busca matérias legislativas no Senado Federal, com situação, comissão e relator."""
 
@@ -134,6 +135,16 @@ async def listar_materias_senado(
                 }
                 for m in lista_materias
             ]
+
+            if keywords:
+                termo = keywords.strip().lower()
+                if termo:
+                    materias_formatadas = [
+                        m for m in materias_formatadas
+                        if termo in (m.get("ementa") or "").lower()
+                        or termo in (m.get("autor") or "").lower()
+                        or termo in (m.get("sigla") or "").lower()
+                    ]
 
             if enriquecer and materias_formatadas:
                 alvo = materias_formatadas[:20]

@@ -7,7 +7,7 @@ import { titularLimpo } from "./AutorBadge";
 import { getSenadoResumo } from "@/lib/relmeg/apiService";
 
 export function SenadoView() {
-  const { data, addItem } = useRelmeg();
+  const { data, addItem, filters } = useRelmeg();
   const [recarregando, setRecarregando] = useState(false);
   const dadosSenado = data.filter((item) => item.categoria === "senado");
   const perfis = useMemo(() => data.filter((item) => item.nome), [data]);
@@ -16,7 +16,7 @@ export function SenadoView() {
   const atualizarBase = async () => {
     setRecarregando(true);
     try {
-      const resposta = (await getSenadoResumo()) as any;
+      const resposta = (await getSenadoResumo(filters.busca)) as any;
       const materias = resposta?.materias ?? [];
       if (materias.length === 0) {
         toast.info("Nenhuma matéria retornada pela API do Senado.");
