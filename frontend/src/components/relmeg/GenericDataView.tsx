@@ -41,6 +41,8 @@ interface GenericDataViewProps {
   onAdicionarAoMonitoramento?: (itens: any[]) => void;
   onExportarClipping?: (itens: any[]) => void;
   autoCarregarVazio?: boolean;
+  visaoPadraoCards?: boolean;
+  extraAcoes?: React.ReactNode;
 }
 
 const OPCOES_POR_PAGINA = [20, 50] as const;
@@ -59,6 +61,8 @@ export function GenericDataView({
   onAdicionarAoMonitoramento,
   onExportarClipping,
   autoCarregarVazio = false,
+  visaoPadraoCards = false,
+  extraAcoes,
 }: GenericDataViewProps) {
   const { filters, favoritos } = useRelmeg();
   const busca = filters?.busca ?? "";
@@ -69,7 +73,7 @@ export function GenericDataView({
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [porPagina, setPorPagina] = useState<number>(OPCOES_POR_PAGINA[0]);
-  const [visao, setVisao] = useState<Visao>(OPCOES_VISAO[0]);
+  const [visao, setVisao] = useState<Visao>(visaoPadraoCards ? "cards" : "tabela");
   const autoLoadFeito = useRef(false);
 
   useEffect(() => {
@@ -183,18 +187,21 @@ export function GenericDataView({
           </h1>
           <p className="text-sm text-muted-foreground">{subtitulo}</p>
         </div>
-        {onRefresh && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onRefresh}
-            disabled={loading}
-            className="gap-2"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            {loading ? "Atualizando…" : "Atualizar base"}
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {extraAcoes}
+          {onRefresh && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              disabled={loading}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              {loading ? "Atualizando…" : "Atualizar base"}
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm sm:flex-row sm:items-center">

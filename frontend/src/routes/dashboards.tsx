@@ -18,7 +18,9 @@ import { KpiCards } from "@/components/relmeg/KpiCards";
 import { FichaDialog } from "@/components/relmeg/FichaDialog";
 import { EmptyState } from "@/components/relmeg/EmptyState";
 import { FilterBar, aplicarFiltros } from "@/components/relmeg/FilterBar";
+import { ClienteSelector } from "@/components/relmeg/ClienteSelector";
 import { useRelmeg } from "@/lib/relmeg/store";
+import { filtrarPorCliente } from "@/lib/relmeg/clientes";
 import { type Parlamentar } from "@/lib/relmeg/types";
 
 export const Route = createFileRoute("/dashboards")({
@@ -107,8 +109,9 @@ function Painel({
 }
 
 function Dashboards() {
-  const { data, filters, textos, prefs } = useRelmeg();
-  const filtrados: Parlamentar[] = aplicarFiltros(data, filters);
+  const { data, filters, textos, prefs, clienteAtivo } = useRelmeg();
+  const baseRecorte = filtrarPorCliente(data, clienteAtivo) as Parlamentar[];
+  const filtrados: Parlamentar[] = aplicarFiltros(baseRecorte, filters);
 
   const Titulo = () => (
     <div>
@@ -124,6 +127,18 @@ function Dashboards() {
         <EmptyState
           titulo="Sem dados para analisar"
           descricao="Os dashboards são gerados a partir da base importada. Envie uma planilha no painel Admin para visualizar os gráficos."
+        />
+      </div>
+    );
+  }
+
+  if (baseRecorte.length === 0) {
+    return (
+      <div className="space-y-6">
+        <Titulo />
+        <EmptyState
+          titulo="Nenhum registro no recorte do cliente ativo"
+          descricao="Selecione 'Todos os Clientes/Temas' ou escolha outro cliente para recuperar os dados dos painéis."
         />
       </div>
     );
@@ -183,7 +198,8 @@ function Dashboards() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <Titulo />
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ClienteSelector />
           <Button asChild variant="outline" size="sm">
             <Link to="/configuracoes">
               <SlidersHorizontal className="h-4 w-4" /> Editar cards

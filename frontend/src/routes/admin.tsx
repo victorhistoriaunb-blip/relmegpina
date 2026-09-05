@@ -36,6 +36,7 @@ import {
   removerAnexo,
   rotuloCliente,
 } from "@/lib/relmeg/store";
+import { ClientesCrud } from "@/components/relmeg/ClientesCrud";
 import { CAMPOS_TEXTO } from "@/lib/relmeg/textos";
 import {
   OBRIGATORIOS,
@@ -162,6 +163,8 @@ function Painel() {
           <LogOut className="h-4 w-4" /> Sair
         </Button>
       </div>
+
+      <ClientesCrud />
 
       <div className="panel panel-hover rise-in rounded-xl p-6">
         <h2 className="font-display text-base font-semibold">Importar planilha</h2>

@@ -101,6 +101,36 @@ export type Database = {
         }
         Relationships: []
       }
+      clientes: {
+        Row: {
+          key: string
+          label: string
+          palavras_chave: string[]
+          setor: string
+          user_id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          key: string
+          label?: string
+          palavras_chave?: string[]
+          setor?: string
+          user_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          key?: string
+          label?: string
+          palavras_chave?: string[]
+          setor?: string
+          user_id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

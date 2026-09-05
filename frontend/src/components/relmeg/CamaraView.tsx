@@ -1,22 +1,28 @@
 import { useMemo, useState } from "react";
 import { GenericDataView } from "./GenericDataView";
+import { ClienteSelector } from "./ClienteSelector";
 import { useRelmeg } from "@/lib/relmeg/store";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { titularLimpo } from "./AutorBadge";
 import { getCamaraResumo } from "@/lib/relmeg/apiService";
+import { clienteDeEmenta, filtrarPorCliente, termosDeMonitoramento } from "@/lib/relmeg/clientes";
 
 export function CamaraView() {
-  const { data, addItem, filters } = useRelmeg();
+  const { data, addItem, filters, clientes, clienteAtivo } = useRelmeg();
   const [recarregando, setRecarregando] = useState(false);
-  const dadosCamara = data.filter((item) => item.categoria === "camara");
+  const dadosCamara = filtrarPorCliente(
+    data.filter((item) => item.categoria === "camara"),
+    clienteAtivo,
+  );
   const perfis = useMemo(() => data.filter((item) => item.nome), [data]);
   const perfisMap = useMemo(() => new Map(perfis.map((p) => [titularLimpo(p.nome), p])), [perfis]);
 
   const atualizarBase = async () => {
     setRecarregando(true);
     try {
-      const resposta = (await getCamaraResumo(filters.busca)) as any;
+      const keywords = termosDeMonitoramento(clienteAtivo, clientes, filters.busca);
+      const resposta = (await getCamaraResumo(keywords || undefined)) as any;
       const proposicoes = resposta?.proposicoes ?? [];
       if (proposicoes.length === 0) {
         toast.info("Nenhuma proposição retornada pela API da Câmara.");
@@ -26,6 +32,7 @@ export function CamaraView() {
         id: String(p.id),
         categoria: "camara",
         origemCategoria: "camara",
+        cliente: clienteDeEmenta(String(p.ementa ?? ""), clientes) ?? undefined,
         siglaTipo: p.siglaTipo,
         numero: String(p.numero ?? ""),
         ano: String(p.ano ?? ""),
@@ -74,11 +81,13 @@ export function CamaraView() {
   return (
     <GenericDataView
       titulo="Câmara dos Deputados"
-      subtitulo="Proposições e matérias cadastradas na plataforma."
+      subtitulo="Proposições e matérias cadastradas no recorte do cliente ativo."
       data={dadosCamara}
       loading={recarregando}
       onRefresh={atualizarBase}
       autoCarregarVazio
+      visaoPadraoCards
+      extraAcoes={<ClienteSelector />}
       selecionavel
       onAdicionarAoMonitoramento={adicionarAoMonitoramento}
       columns={[

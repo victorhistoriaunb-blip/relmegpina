@@ -1,22 +1,28 @@
 import { useMemo, useState } from "react";
 import { GenericDataView } from "./GenericDataView";
+import { ClienteSelector } from "./ClienteSelector";
 import { useRelmeg } from "@/lib/relmeg/store";
 import { toast } from "sonner";
 import { AutorComAlerta, AndamentoComissao } from "./CamaraView";
 import { titularLimpo } from "./AutorBadge";
 import { getSenadoResumo } from "@/lib/relmeg/apiService";
+import { clienteDeEmenta, filtrarPorCliente, termosDeMonitoramento } from "@/lib/relmeg/clientes";
 
 export function SenadoView() {
-  const { data, addItem, filters } = useRelmeg();
+  const { data, addItem, filters, clientes, clienteAtivo } = useRelmeg();
   const [recarregando, setRecarregando] = useState(false);
-  const dadosSenado = data.filter((item) => item.categoria === "senado");
+  const dadosSenado = filtrarPorCliente(
+    data.filter((item) => item.categoria === "senado"),
+    clienteAtivo,
+  );
   const perfis = useMemo(() => data.filter((item) => item.nome), [data]);
   const perfisMap = useMemo(() => new Map(perfis.map((p) => [titularLimpo(p.nome), p])), [perfis]);
 
   const atualizarBase = async () => {
     setRecarregando(true);
     try {
-      const resposta = (await getSenadoResumo(filters.busca)) as any;
+      const keywords = termosDeMonitoramento(clienteAtivo, clientes, filters.busca);
+      const resposta = (await getSenadoResumo(keywords || undefined)) as any;
       const materias = resposta?.materias ?? [];
       if (materias.length === 0) {
         toast.info("Nenhuma matéria retornada pela API do Senado.");
@@ -26,6 +32,7 @@ export function SenadoView() {
         id: String(m.codigo ?? m.identificacaoProcesso ?? ""),
         categoria: "senado",
         origemCategoria: "senado",
+        cliente: clienteDeEmenta(String(m.ementa ?? ""), clientes) ?? undefined,
         sigla: m.sigla,
         numero: String(m.numero ?? ""),
         ano: String(m.ano ?? ""),
@@ -76,11 +83,13 @@ export function SenadoView() {
   return (
     <GenericDataView
       titulo="Senado Federal"
-      subtitulo="Matérias e propostas em tramitação no Senado."
+      subtitulo="Matérias e propostas em tramitação no recorte do cliente ativo."
       data={dadosSenado}
       loading={recarregando}
       onRefresh={atualizarBase}
       autoCarregarVazio
+      visaoPadraoCards
+      extraAcoes={<ClienteSelector />}
       selecionavel
       onAdicionarAoMonitoramento={adicionarAoMonitoramento}
       columns={[

@@ -23,6 +23,7 @@ import { useRelmeg, setClienteAtivo } from "@/lib/relmeg/store";
 import { exportarClippingParaWhatsApp, formatarData, autorComPartido } from "@/lib/relmeg/clipping";
 import { getCamaraResumo, getSenadoResumo } from "@/lib/relmeg/apiService";
 import { exportarCSV, exportarXLSX } from "@/lib/relmeg/export";
+import { termosDeMonitoramento, clienteDeEmenta } from "@/lib/relmeg/clientes";
 import { toast } from "sonner";
 
 type Casa = "camara" | "senado";
@@ -243,10 +244,16 @@ export function NovasProposicoesView() {
   async function atualizarBase() {
     setCarregando(true);
     try {
-      const [camara, senado] = await Promise.all([getCamaraResumo(), getSenadoResumo()]);
+      const keywords =
+        termosDeMonitoramento(clienteAtivo, clientes, "") || undefined;
+      const [camara, senado] = await Promise.all([
+        getCamaraResumo(keywords),
+        getSenadoResumo(keywords),
+      ]);
       const camaraItens = ((camara as any)?.proposicoes ?? []).map((p: any) => ({
         id: String(p.id),
         categoria: "camara",
+        cliente: clienteDeEmenta(String(p.ementa ?? ""), clientes) ?? undefined,
         siglaTipo: p.siglaTipo,
         numero: String(p.numero ?? ""),
         ano: String(p.ano ?? ""),
@@ -258,6 +265,7 @@ export function NovasProposicoesView() {
       const senadoItens = ((senado as any)?.materias ?? []).map((m: any) => ({
         id: String(m.codigo ?? m.identificacaoProcesso ?? ""),
         categoria: "senado",
+        cliente: clienteDeEmenta(String(m.ementa ?? ""), clientes) ?? undefined,
         sigla: m.sigla,
         numero: String(m.numero ?? ""),
         ano: String(m.ano ?? ""),

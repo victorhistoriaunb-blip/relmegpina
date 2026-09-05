@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Sparkles, Loader2, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { GenericDataView } from "./GenericDataView";
+import { ClienteSelector } from "./ClienteSelector";
 import { useRelmeg, setFilter, substituirCategoria } from "@/lib/relmeg/store";
 import { resumirPublicacaoDoDou, getDOU } from "@/lib/relmeg/apiService";
 import { formatarData } from "@/lib/relmeg/clipping";
@@ -16,6 +17,11 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { toast } from "sonner";
+import {
+  clienteDeEmenta,
+  filtrarPorCliente,
+  termosDeMonitoramento,
+} from "@/lib/relmeg/clientes";
 
 const FILTROS_RAPIDOS = [
   { label: "Setor Elétrico/Energia", termos: "energia elétrica" },
@@ -24,8 +30,11 @@ const FILTROS_RAPIDOS = [
 ] as const;
 
 export function DouView() {
-  const { data } = useRelmeg();
-  const dadosDou = data.filter((item) => item.categoria === "dou");
+  const { data, clientes, clienteAtivo } = useRelmeg();
+  const dadosDou = filtrarPorCliente(
+    data.filter((item) => item.categoria === "dou"),
+    clienteAtivo,
+  );
 
   const [publicacao, setPublicacao] = useState<any | null>(null);
   const [sheetAberto, setSheetAberto] = useState(false);
@@ -39,15 +48,17 @@ export function DouView() {
     if (varrendo) return;
     setVarrendo(true);
     try {
-      const resposta = (await getDOU(termo)) as any;
+      const termoBusca = termosDeMonitoramento(clienteAtivo, clientes, termo) || termo;
+      const resposta = (await getDOU(termoBusca)) as any;
       const resultados = resposta?.resultados ?? [];
       if (resultados.length === 0) {
-        toast.info(`Nenhuma publicação encontrada no DOU para "${termo}".`);
+        toast.info(`Nenhuma publicação encontrada no DOU para "${termoBusca}".`);
         return;
       }
       const itens = resultados.map((r: any, idx: number) => ({
         id: `dou-${idx}-${String(r.titulo || "").slice(0, 40)}`,
         categoria: "dou",
+        cliente: clienteDeEmenta(String(r.titulo ?? "") + " " + String(r.orgao ?? ""), clientes) ?? undefined,
         titulo: String(r.titulo ?? "") || `Publicação ${idx + 1}`,
         orgao: String(r.orgao ?? "") || "DOU",
         data: String(r.data_publicacao ?? ""),
@@ -55,7 +66,7 @@ export function DouView() {
         url: r.url ?? undefined,
         tipo: String(r.tipo ?? "") || "secao1",
         secao: String(r.tipo ?? "") || "secao1",
-        ementa: String(r.titulo ?? "") || `Publicação relacionada a "${termo}”`,
+        ementa: String(r.titulo ?? "") || `Publicação relacionada a "${termoBusca}”`,
       }));
       substituirCategoria("dou", itens);
       toast.success(`${itens.length} publicações encontradas e carregadas do DOU.`);
@@ -132,9 +143,10 @@ export function DouView() {
             Diário Oficial da União (DOU)
           </h1>
           <p className="text-sm text-muted-foreground">
-            Monitoramento de atos normativos e publicações oficiais.
+            Monitoramento de atos normativos e publicações oficiais no recorte do cliente ativo.
           </p>
         </div>
+        <ClienteSelector />
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
@@ -181,17 +193,20 @@ export function DouView() {
         {dadosDou.length === 0 && !varrendo && (
           <p className="text-xs text-muted-foreground">
             Nenhuma publicação carregada ainda. Clique em "Buscar no DOU" para puxar os atos do seu
-            recorte — ao abrir uma linha, gere o resumo com IA.
+            recorte{clienteAtivo !== "todos" ? ", priorizando as palavras-chave do cliente ativo" : ""} —
+            ao abrir uma linha, gere o resumo com IA.
           </p>
         )}
       </div>
 
       <GenericDataView
         titulo="Publicações do DOU"
-        subtitulo="Atos e normativos do seu recorte de acompanhamento."
+        subtitulo="Atos e normativos do recorte de acompanhamento."
         data={dadosDou}
         loading={varrendo}
         onRowClick={abrirPublicacao}
+        visaoPadraoCards
+        extraAcoes={<ClienteSelector />}
         columns={[
           {
             key: "data",

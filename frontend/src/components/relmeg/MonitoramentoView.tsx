@@ -1,8 +1,10 @@
 import { GenericDataView } from "./GenericDataView";
+import { ClienteSelector } from "./ClienteSelector";
 import { useRelmeg } from "@/lib/relmeg/store";
 import { exportarClippingParaWhatsApp } from "@/lib/relmeg/clipping";
 import { Badge } from "@/components/ui/badge";
 import { tituloProposicao, casaDe } from "@/lib/relmeg/clipping";
+import { filtrarPorCliente } from "@/lib/relmeg/clientes";
 
 const ROTULO_CASA: Record<string, string> = {
   camara: "Câmara",
@@ -12,15 +14,20 @@ const ROTULO_CASA: Record<string, string> = {
 };
 
 export function MonitoramentoView() {
-  const { data } = useRelmeg();
-  const dadosMon = data.filter((item) => item.categoria === "monitoramento");
+  const { data, clienteAtivo } = useRelmeg();
+  const dadosMon = filtrarPorCliente(
+    data.filter((item) => item.categoria === "monitoramento"),
+    clienteAtivo,
+  );
 
   return (
     <GenericDataView
       titulo="Central de Monitoramento"
-      subtitulo="Tracking em tempo real de proposições, matérias e candidaturas."
+      subtitulo="Tracking em tempo real de proposições, matérias e candidaturas no recorte do cliente ativo."
       data={dadosMon}
       selecionavel
+      visaoPadraoCards
+      extraAcoes={<ClienteSelector />}
       onExportarClipping={(itens) => void exportarClippingParaWhatsApp(itens)}
       columns={[
         {
