@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AjudaRouteImport } from './routes/ajuda'
 import { Route as CamaraRouteImport } from './routes/camara'
+import { Route as ComoUsarRouteImport } from './routes/como-usar'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as DashboardsRouteImport } from './routes/dashboards'
 import { Route as DouRouteImport } from './routes/dou'
@@ -40,6 +41,11 @@ const AjudaRoute = AjudaRouteImport.update({
 const CamaraRoute = CamaraRouteImport.update({
   id: '/camara',
   path: '/camara',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComoUsarRoute = ComoUsarRouteImport.update({
+  id: '/como-usar',
+  path: '/como-usar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/ajuda': typeof AjudaRoute
   '/camara': typeof CamaraRoute
+  '/como-usar': typeof ComoUsarRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/dashboards': typeof DashboardsRoute
   '/dou': typeof DouRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/ajuda': typeof AjudaRoute
   '/camara': typeof CamaraRoute
+  '/como-usar': typeof ComoUsarRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/dashboards': typeof DashboardsRoute
   '/dou': typeof DouRoute
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/ajuda': typeof AjudaRoute
   '/camara': typeof CamaraRoute
+  '/como-usar': typeof ComoUsarRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/dashboards': typeof DashboardsRoute
   '/dou': typeof DouRoute
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/ajuda'
     | '/camara'
+    | '/como-usar'
     | '/configuracoes'
     | '/dashboards'
     | '/dou'
@@ -147,6 +157,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/ajuda'
     | '/camara'
+    | '/como-usar'
     | '/configuracoes'
     | '/dashboards'
     | '/dou'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/ajuda'
     | '/camara'
+    | '/como-usar'
     | '/configuracoes'
     | '/dashboards'
     | '/dou'
@@ -176,6 +188,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AjudaRoute: typeof AjudaRoute
   CamaraRoute: typeof CamaraRoute
+  ComoUsarRoute: typeof ComoUsarRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   DashboardsRoute: typeof DashboardsRoute
   DouRoute: typeof DouRoute
@@ -214,6 +227,13 @@ declare module '@tanstack/react-router' {
       path: '/camara'
       fullPath: '/camara'
       preLoaderRoute: typeof CamaraRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/como-usar': {
+      id: '/como-usar'
+      path: '/como-usar'
+      fullPath: '/como-usar'
+      preLoaderRoute: typeof ComoUsarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/configuracoes': {
@@ -280,6 +300,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AjudaRoute: AjudaRoute,
   CamaraRoute: CamaraRoute,
+  ComoUsarRoute: ComoUsarRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
   DashboardsRoute: DashboardsRoute,
   DouRoute: DouRoute,

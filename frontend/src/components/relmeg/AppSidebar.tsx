@@ -11,6 +11,7 @@ import {
   Radar,
   Vote,
   Sparkles,
+  BookOpen,
 } from "lucide-react";
 import { LogoLockup } from "./Logo";
 import {
@@ -34,9 +35,10 @@ const items = [
   { title: "Câmara", url: "/camara", icon: FileText },
   { title: "Senado", url: "/senado", icon: Building2 },
   { title: "Novas Proposições", url: "/novas-proposicoes", icon: Sparkles },
-  { title: "Eleições", url: "/tse", icon: Vote },
+  { title: "TSE — Eleições", url: "/tse", icon: Vote },
   { title: "DOU", url: "/dou", icon: Newspaper },
   { title: "Monitoramento", url: "/monitoramento", icon: Radar },
+  { title: "Como Usar", url: "/como-usar", icon: BookOpen },
   { title: "Central de Ajuda", url: "/ajuda", icon: LifeBuoy },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
   { title: "Admin", url: "/admin", icon: ShieldCheck },

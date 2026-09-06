@@ -38,8 +38,10 @@ export async function getSenadoComissoes() {
   return await fetchApi("/senado/comissoes");
 }
 
-export async function getDOU(q: string = "energia elétrica") {
-  return await fetchApi(`/dou/pesquisa?q=${encodeURIComponent(q)}`);
+export async function getDOU(q: string = "energia elétrica", data?: string) {
+  const params = new URLSearchParams({ q });
+  if (data) params.set("data", data);
+  return await fetchApi(`/dou/pesquisa?${params.toString()}`);
 }
 
 export async function getMonitoramento() {

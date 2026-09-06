@@ -8,12 +8,19 @@ from fastapi import APIRouter, HTTPException, Path, Query
 from starlette.requests import Request
 from typing import Optional
 import httpx
+import os
 
 from rate_limit import limiter, LIMITE_TSE
 
 router = APIRouter(prefix="/tse", tags=["TSE"])
 
-BASE_TSE = "https://divulgacandcontas.tse.jus.br/divulga/rest/v1"
+# Permite sobrepor a base oficial em deploys (ex.: proxy/cache autorizado).
+BASE_TSE = os.getenv("TSE_BASE_URL", "https://divulgacandcontas.tse.jus.br/divulga/rest/v1")
+
+_HEADERS = {
+    "Accept": "application/json",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+}
 
 # Ano eleitoral -> id_eleicao correspondente (eleição ordinária no TSE)
 IDS_ELEICAO = {
@@ -65,21 +72,59 @@ def _validar_cargo(codigo_cargo: int) -> int:
 def _texto(valor) -> str:
     """Normaliza valores que o TSE retorna como objeto {codigo, nome} ou string."""
     if isinstance(valor, dict):
-        return str(valor.get("nome") or "").strip()
+        return str(valor.get("nome") or valor.get("sigla") or "").strip()
     return str(valor or "").strip()
+
+
+def _enriquece(c: dict) -> dict:
+    """Extrai de forma defensiva os campos adicionais que a API do TSE
+    pode ou não entregar na listagem (varia por ano/versão do DivulgaCandContas)."""
+    partido = c.get("partido") or {}
+    return {
+        "id": c.get("id"),
+        "nomeUrna": c.get("nomeUrna"),
+        "nomeCompleto": c.get("nomeCompleto"),
+        "numero": c.get("numero"),
+        "siglaPartido": partido.get("sigla") or c.get("siglaPartido"),
+        "descricaoSituacao": _texto(c.get("descricaoSituacao") or c.get("situacao")),
+        "fotoUrl": c.get("fotoUrl"),
+        "municipio": _texto(c.get("municipio") or c.get("descricaoMunicipio") or c.get("ue")),
+        "cpf": c.get("cpf"),
+        "cnpj": c.get("cnpj"),
+        "genero": _texto(c.get("genero")),
+        "corRaca": _texto(c.get("corRaca") or c.get("raca")),
+        "dataNascimento": c.get("dataNascimento"),
+    }
+
+
+def _aplica_filtro(candidatos: list, valor: str, campo: str) -> list:
+    """Filtro por substring (case-insensitive) em um campo do candidato."""
+    alvo = _texto(valor).lower()
+    if not alvo:
+        return candidatos
+    return [
+        c for c in candidatos
+        if alvo in _texto(c.get(campo)).lower()
+    ]
 
 
 async def _get_json(url: str) -> dict:
     """Executa o GET na API do TSE e devolve o JSON ou erro amigável."""
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
-            resposta = await client.get(url, headers={"Accept": "application/json"})
+            resposta = await client.get(url, headers=_HEADERS)
             resposta.raise_for_status()
             return resposta.json()
     except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if status == 403:
+            raise HTTPException(
+                status_code=502,
+                detail="O TSE bloqueou a consulta automática (403 Access Denied). Confirme os dados diretamente no portal Divisão de Contas Eleitorais e tente novamente em instantes.",
+            ) from exc
         raise HTTPException(
             status_code=502,
-            detail=f"O TSE respondeu com erro {exc.response.status_code} na consulta.",
+            detail=f"O TSE respondeu com erro {status} na consulta.",
         ) from exc
     except httpx.TimeoutException as exc:
         raise HTTPException(status_code=504, detail="O TSE demorou demais para responder. Tente novamente.") from exc
@@ -94,9 +139,12 @@ async def listar_candidatos(
     ano: int = Query(..., description="Ano eleitoral: 2024, 2022 ou 2020", ge=2020, le=2030),
     uf: str = Query(..., min_length=2, max_length=2, description="Sigla da UF (2 letras) ou BR"),
     codigo_cargo: int = Query(..., ge=1, le=13, description="Código do cargo (1, 3, 5, 6, 7, 11, 13)"),
-    q: Optional[str] = Query(None, max_length=120, description="Termo livre para filtrar por nome de urna, nome completo ou partido"),
+    q: Optional[str] = Query(None, max_length=120, description="Termo livre para filtrar por nome de urna, nome completo, CPF/CNPJ, número ou partido"),
+    partido: Optional[str] = Query(None, max_length=20, description="Sigla do partido (ex: PL) para filtrar candidaturas"),
+    situacao: Optional[str] = Query(None, max_length=40, description="Status da candidatura (ex: deferido, indeferido, sub judice)"),
+    municipio: Optional[str] = Query(None, max_length=80, description="Nome do município da candidatura (melhor esforço)"),
 ):
-    """Lista candidatos de uma eleição com base em ano, UF, cargo e termo opcional."""
+    """Lista candidatos de uma eleição com base em ano, UF, cargo e filtros avançados."""
     uf = _validar_uf(uf)
     id_eleicao = _id_eleicao(ano)
     _validar_cargo(codigo_cargo)
@@ -106,29 +154,22 @@ async def listar_candidatos(
 
     candidatos_brutos = dados.get("candidatos") or []
 
-    candidatos = []
-    for c in candidatos_brutos:
-        partido = c.get("partido") or {}
-        candidatos.append(
-            {
-                "id": c.get("id"),
-                "nomeUrna": c.get("nomeUrna"),
-                "nomeCompleto": c.get("nomeCompleto"),
-                "numero": c.get("numero"),
-                "siglaPartido": partido.get("sigla") or c.get("siglaPartido"),
-                "descricaoSituacao": c.get("descricaoSituacao"),
-                "fotoUrl": c.get("fotoUrl"),
-            }
-        )
+    candidatos = [_enriquece(c) for c in candidatos_brutos]
+
+    # Filtros avançados aplicados de forma defensiva: os campos podem não
+    # estar presentes em algumas versões da API; quando ausentes, o filtro
+    # apenas não tem efeito (não derruba a consulta).
+    candidatos = _aplica_filtro(candidatos, partido, "siglaPartido")
+    candidatos = _aplica_filtro(candidatos, situacao, "descricaoSituacao")
+    candidatos = _aplica_filtro(candidatos, municipio, "municipio")
 
     if q:
         termo = q.strip().lower()
         if termo:
+            campos = ["nomeUrna", "nomeCompleto", "siglaPartido", "municipio", "cpf", "cnpj"]
             candidatos = [
                 c for c in candidatos
-                if termo in (c.get("nomeUrna") or "").lower()
-                or termo in (c.get("nomeCompleto") or "").lower()
-                or termo in (c.get("siglaPartido") or "").lower()
+                if any(termo in _texto(c.get(campo)).lower() for campo in campos)
                 or termo == str(c.get("numero") or "").lower()
             ]
 
@@ -176,6 +217,10 @@ async def detalhe_candidato(
             "cpf": conteudo.get("cpf"),
             "ocupacao": _texto(conteudo.get("ocupacao")),
             "grauInstrucao": _texto(conteudo.get("grauInstrucao")),
+            "genero": _texto(conteudo.get("genero")),
+            "corRaca": _texto(conteudo.get("corRaca") or conteudo.get("raca")),
+            "dataNascimento": conteudo.get("dataNascimento"),
+            "estadoCivil": _texto(conteudo.get("estadoCivil")),
             "situacao": conteudo.get("descricaoSituacao"),
             "fotoUrl": conteudo.get("fotoUrl"),
         },

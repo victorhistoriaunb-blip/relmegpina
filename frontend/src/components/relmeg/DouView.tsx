@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Loader2, Search } from "lucide-react";
+import { Sparkles, Loader2, Search, CalendarDays, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { GenericDataView } from "./GenericDataView";
 import { ClienteSelector } from "./ClienteSelector";
@@ -9,6 +9,8 @@ import { formatarData } from "@/lib/relmeg/clipping";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Sheet,
   SheetContent,
@@ -29,6 +31,14 @@ const FILTROS_RAPIDOS = [
   { label: "Delivery/Logística", termos: "logística entrega delivery" },
 ] as const;
 
+/** Converte uma Date em AAAA-MM-DD (formato aceito pelo endpoint /dou/pesquisa). */
+function dataISO(data: Date): string {
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, "0");
+  const dia = String(data.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
+}
+
 export function DouView() {
   const { data, clientes, clienteAtivo } = useRelmeg();
   const dadosDou = filtrarPorCliente(
@@ -41,6 +51,7 @@ export function DouView() {
   const [resumindo, setResumindo] = useState(false);
   const [resumo, setResumo] = useState<string | null>(null);
   const [termo, setTermo] = useState<string>(FILTROS_RAPIDOS[0].termos);
+  const [dia, setDia] = useState<string | undefined>(undefined);
   const [varrendo, setVarrendo] = useState(false);
   const autoVarreduraFeita = useRef(false);
 
@@ -49,7 +60,7 @@ export function DouView() {
     setVarrendo(true);
     try {
       const termoBusca = termosDeMonitoramento(clienteAtivo, clientes, termo) || termo;
-      const resposta = (await getDOU(termoBusca)) as any;
+      const resposta = (await getDOU(termoBusca, dia)) as any;
       const resultados = resposta?.resultados ?? [];
       if (resultados.length === 0) {
         toast.info(`Nenhuma publicação encontrada no DOU para "${termoBusca}".`);
@@ -181,6 +192,45 @@ export function DouView() {
               className="pl-9"
             />
           </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="gap-2 justify-start" title="Filtrar publicações por dia exato">
+                <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-[72px] text-left">
+                  {dia ? formatarData(dia) : "Dia exato"}
+                </span>
+                {dia && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDia(undefined);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation();
+                        setDia(undefined);
+                      }
+                    }}
+                    className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    aria-label="Limpar filtro de data"
+                    title="Limpar filtro de data"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={dia ? new Date(`${dia}T00:00:00`) : undefined}
+                onSelect={(selecionado) => setDia(selecionado ? dataISO(selecionado) : undefined)}
+                captionLayout="dropdown"
+              />
+            </PopoverContent>
+          </Popover>
           <Button onClick={() => void varrer()} disabled={varrendo || !termo.trim()} className="gap-2">
             {varrendo ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -190,11 +240,30 @@ export function DouView() {
             {varrendo ? "Buscando…" : "Buscar no DOU"}
           </Button>
         </div>
+        {dia && (
+          <p className="text-xs text-muted-foreground">
+            Busca filtrada para o dia{" "}
+            <Badge variant="outline" className="mx-0.5 align-middle font-normal text-muted-foreground">
+              {formatarData(dia)}
+            </Badge>
+            cruzando com as palavras-chave do{" "}
+            {clienteAtivo !== "todos" ? "cliente ativo" : "termo informado"}.
+            <button
+              type="button"
+              onClick={() => setDia(undefined)}
+              className="ml-1 font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+            >
+              Limpar dia
+            </button>
+          </p>
+        )}
         {dadosDou.length === 0 && !varrendo && (
           <p className="text-xs text-muted-foreground">
-            Nenhuma publicação carregada ainda. Clique em "Buscar no DOU" para puxar os atos do seu
-            recorte{clienteAtivo !== "todos" ? ", priorizando as palavras-chave do cliente ativo" : ""} —
-            ao abrir uma linha, gere o resumo com IA.
+            Nenhuma publicação carregada ainda. Escolha um dia no calendário (opcional) e clique em
+            "Buscar no DOU" para cruzar a data com o termo{" "}
+            {clienteAtivo !== "todos"
+              ? "e as palavras-chave do cliente ativo"
+              : "informado"} — ao abrir uma linha, gere o resumo com IA.
           </p>
         )}
       </div>

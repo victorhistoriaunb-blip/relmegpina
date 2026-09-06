@@ -53,19 +53,45 @@ export function casaDe(item: any): CasaClipping {
   return "outros";
 }
 
-export function linkProposicao(item: any): string | undefined {
-  const direto = limpar(item.link || item.link1 || item.uri || item.url);
-  if (direto) return direto;
+/**
+ * Apenas links que apontam para páginas web oficiais navegáveis.
+ * Rejeita JSON/XML de APIs abertas (dadosabertos.camara, legis/senado/dadosabertos),
+ * que quebram quando abertos no navegador como "página indisponível".
+ */
+function linkWebOficial(url: string): boolean {
+  const bruto = url.toLowerCase();
+  if (bruto.includes("dadosabertos") || bruto.includes("/api/") || bruto.includes("api/v2")) {
+    return false;
+  }
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return /(^|\.)(camara\.leg\.br|senado\.leg\.br|in\.gov\.br)$/.test(host);
+  } catch {
+    return false;
+  }
+}
 
+export function linkProposicao(item: any): string | undefined {
   const casa = casaDe(item);
+
+  // 1) Link oficial determinístico — ficha da proposição no portal da Casa.
+  //    Prioridade máxima: evita a "uri" JSON da API aberta (dadosabertos) e o
+  //    'UrlDetalheMateria' do Senado quando o código oficial está disponível.
   const id = String(item.id ?? "").trim();
-  if (casa === "camara" && /^\d+$/.test(id)) {
+  if (casa === "camara" && /^\d+$/.test(id) && Number(id) > 0) {
     return `https://www.camara.leg.br/proposicoesWeb/fichadetramitacao?idProposicao=${id}`;
   }
   const codigo = String(item.codigo ?? item.id ?? "").trim();
-  if (casa === "senado" && /^\d+$/.test(codigo)) {
+  if (casa === "senado" && /^\d+$/.test(codigo) && Number(codigo) > 0) {
     return `https://www25.senado.leg.br/web/atividade/materias/-/materia/${codigo}`;
   }
+
+  // 2) Link fornecido pelas APIs apenas se for página web oficial navegável.
+  for (const chave of ["link", "link1", "url", "urls", "uri"] as const) {
+    const valor = limpar(item[chave]);
+    if (valor && linkWebOficial(valor)) return valor;
+  }
+
   return undefined;
 }
 

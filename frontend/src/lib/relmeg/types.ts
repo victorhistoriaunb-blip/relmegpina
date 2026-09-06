@@ -1,7 +1,5 @@
 export type Proposicao = { numero: string; ementa: string; link: string };
 
-export type ClienteKey = "abradee" | "abeeolica" | "ifood" | "energia";
-
 export interface ClienteDef {
   /** Chave única (slug) usada como identificador do cliente/projeto. */
   key: string;
@@ -26,83 +24,7 @@ export interface Anexo {
   conteudoBase64?: string;
 }
 
-export const CLIENTES_DEFAULT: ClienteDef[] = [
-  {
-    key: "abradee",
-    label: "ABRADEE",
-    setor: "Setor elétrico / distribuição",
-    palavrasChave: [
-      "energia elétrica",
-      "distribuição",
-      "distribution",
-      "aneel",
-      "tarifa",
-      "setor elétrico",
-      "rede básica",
-      "eletroposto",
-      "microgeração",
-      "minigeração",
-      "geração distribuída",
-      "subsídio",
-      "subestação",
-      "perdas técnicas",
-      "universalização",
-    ],
-    temas: ["Distribuição de energia", "ANEEL", "Tarifas", "Setor elétrico"],
-  },
-  {
-    key: "abeeolica",
-    label: "ABEEólica",
-    setor: "Energias renováveis",
-    palavrasChave: [
-      "eólica",
-      "eolica",
-      "offshore",
-      "renovável",
-      "renovavel",
-      "solar",
-      "fotovoltaica",
-      "hidrogênio",
-      "hidrogenio",
-      "leilão de energia",
-      "leilao de energia",
-      "transição energética",
-      "transicao energetica",
-      "capacidade instalada",
-      "parque eólico",
-    ],
-    temas: ["Eólica", "Renováveis", "Leilões de energia", "Hidrogênio verde"],
-  },
-  {
-    key: "ifood",
-    label: "iFood",
-    setor: "Tecnologia / delivery / alimentação",
-    palavrasChave: [
-      "entrega",
-      "entregador",
-      "delivery",
-      "plataforma digital",
-      "aplicativo",
-      "dados pessoais",
-      "proteção de dados",
-      "restaurante",
-      "alimentação",
-      "alimentacao",
-      "trabalho por plataforma",
-      "vínculo de emprego",
-      "segurança alimentar",
-      "rua",
-    ],
-    temas: ["Entregas", "Plataformas digitais", "Proteção de dados", "Segurança alimentar"],
-  },
-  {
-    key: "energia",
-    label: "Tema Energia",
-    setor: "Energia em geral",
-    palavrasChave: ["energia", "elétrica", "eletrica", "geração", "geracao", "aneel", "transmissão", "transmissao"],
-    temas: ["Energia", "Setor elétrico", "ANEEL"],
-  },
-];
+export const CLIENTES_DEFAULT: ClienteDef[] = [];
 
 export type Parlamentar = {
   id: string;

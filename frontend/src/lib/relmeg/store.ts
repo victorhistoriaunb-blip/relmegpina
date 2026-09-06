@@ -83,35 +83,7 @@ interface RelmegState {
   logout: () => void;
 }
 
-const dadosIniciais: RelmegItem[] = [
-  {
-    id: "parl-1",
-    nome: "Dep. Exemplo Setorial",
-    partido: "PL",
-    uf: "SP",
-    cargo: "Deputado Federal",
-    categoria: "camara",
-    interesse1: "Energia Renovavel",
-    interesse2: "Marco Hidrico",
-    contrario1: "Aumento de Subsidios",
-    contrario2: "Tributacao sobre Geracao Distribuida",
-    setor1: "Setor Eletrico",
-    setor2: "Infraestrutura",
-    setor3: "Mineracao",
-    descricao:
-      "Deputado atuante na Comissao de Minas e Energia, com foco em seguranca juridica para o setor.",
-    proposicao1: "PL 4162/2024",
-    ementa1: "Estabelece novas diretrizes para o marco regulatorio de transicao energetica.",
-    link1: "https://camara.leg.br",
-    proposicao2: "",
-    ementa2: "",
-    link2: "",
-    proposicao3: "",
-    ementa3: "",
-    link3: "",
-    anotacoes: "Interlocutor-chave para debates regulatorios e emendas setoriais.",
-  },
-];
+const dadosIniciais: RelmegItem[] = [];
 
 const prefsIniciais: RelmegPrefs = {
   saudacao: "Bem-vindo ao RelMeg",
@@ -433,7 +405,7 @@ export const useRelmeg = create<RelmegState>()(
       logout: () => set({ usuario: null, sessao: null, estaAutenticado: false }),
     }),
     {
-      name: "relmeg-storage-local",
+      name: "relmeg-storage-v2",
     },
   ),
 );

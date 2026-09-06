@@ -81,6 +81,13 @@ export interface TseCandidato {
   ano: number;
   uf: string;
   codigoCargo: number;
+  // campos adicionais que a API do TSE pode entregar (melhor esforço)
+  municipio?: string | null;
+  cpf?: string | null;
+  cnpj?: string | null;
+  genero?: string | null;
+  corRaca?: string | null;
+  dataNascimento?: string | null;
 }
 
 export interface TseBem {
@@ -101,6 +108,10 @@ export interface TseCandidatoDetalhe {
     cpf: string | null;
     ocupacao: string;
     grauInstrucao: string;
+    genero?: string | null;
+    corRaca?: string | null;
+    dataNascimento?: string | null;
+    estadoCivil?: string | null;
     situacao: string | null;
     fotoUrl?: string | null;
   };
@@ -111,6 +122,13 @@ export interface TseCandidatoDetalhe {
     federacao: string | null;
   };
   patrimonio: TsePatrimonio;
+}
+
+/** Filtros avançados aceitos na listagem de candidaturas (melhor esforço). */
+export interface TseFiltrosAdicionais {
+  partido?: string;
+  situacao?: string;
+  municipio?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +214,7 @@ export async function listarCandidatosTSE(
   uf: string,
   codigoCargo: number,
   termo: string = "",
+  extras: TseFiltrosAdicionais = {},
 ): Promise<TseCandidato[]> {
   const params = new URLSearchParams({
     ano: String(ano),
@@ -203,6 +222,9 @@ export async function listarCandidatosTSE(
     codigo_cargo: String(codigoCargo),
   });
   if (termo.trim()) params.set("q", termo.trim());
+  if (extras.partido?.trim()) params.set("partido", extras.partido.trim());
+  if (extras.situacao?.trim()) params.set("situacao", extras.situacao.trim());
+  if (extras.municipio?.trim()) params.set("municipio", extras.municipio.trim());
   const resposta = await fetchJson<RespostaListaCandidatos>(`/api/tse/candidatos?${params.toString()}`);
   return (resposta?.candidatos ?? []).map((c) => ({
     ...c,

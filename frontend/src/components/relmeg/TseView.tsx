@@ -3,6 +3,7 @@ import {
   Search,
   Loader2,
   Pin,
+  Star,
   Vote,
   Inbox,
   LayoutGrid,
@@ -49,13 +50,25 @@ import {
   formatarBRL,
   listarCandidatosTSE,
 } from "@/lib/relmeg/tse";
-import type { TseCandidato, TseCandidatoDetalhe } from "@/lib/relmeg/tse";
+import type { TseCandidato, TseCandidatoDetalhe, TseFiltrosAdicionais } from "@/lib/relmeg/tse";
 import { salvarCandidatosNoMonitoramento, toggleFavorito, useRelmeg } from "@/lib/relmeg/store";
 import { exportarCSV, exportarXLSX } from "@/lib/relmeg/export";
+import { formatarData } from "@/lib/relmeg/clipping";
 
 const OPCOES_POR_PAGINA = [20, 50] as const;
 const OPCOES_VISAO = ["tabela", "cards"] as const;
 type Visao = (typeof OPCOES_VISAO)[number];
+
+/** Opções de status da candidatura aceitas na busca (substring case-insensitive). */
+const SITUACOES_TSE = [
+  "todas",
+  "Deferido",
+  "Indeferido",
+  "Sub judice",
+  "Renúncia",
+  "Cancelado",
+  "Aguardando julgamento",
+] as const;
 
 export function TseView() {
   const { favoritos } = useRelmeg();
@@ -63,6 +76,10 @@ export function TseView() {
   const [uf, setUf] = useState<string>("BR");
   const [codigoCargo, setCodigoCargo] = useState<number>(11);
   const [termo, setTermo] = useState("");
+  const [partido, setPartido] = useState("");
+  const [situacao, setSituacao] = useState<string>("todas");
+  const [municipio, setMunicipio] = useState("");
+  const [salvandoUnico, setSalvandoUnico] = useState(false);
   const [candidatos, setCandidatos] = useState<TseCandidato[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -100,6 +117,7 @@ export function TseView() {
         partido: c.siglaPartido ?? "",
         uf: c.uf,
         status: c.descricaoSituacao ?? "",
+        tipo: c.municipio ?? "",
         data: "",
       })),
     [candidatos],
@@ -155,7 +173,12 @@ export function TseView() {
     setPaginaAtual(1);
     setErroInformado(null);
     try {
-      const lista = await listarCandidatosTSE(ano, uf, codigoCargo, termo);
+      const extras: TseFiltrosAdicionais = {
+        ...(partido.trim() ? { partido: partido.trim() } : {}),
+        ...(situacao !== "todas" ? { situacao: situacao.trim() } : {}),
+        ...(municipio.trim() ? { municipio: municipio.trim() } : {}),
+      };
+      const lista = await listarCandidatosTSE(ano, uf, codigoCargo, termo, extras);
       setCandidatos(lista);
       if (lista.length === 0 && !silencioso) {
         toast.info("Nenhum candidato encontrado para os filtros selecionados.");
@@ -208,21 +231,40 @@ export function TseView() {
     }
   }
 
+  async function adicionarAoMonitoramentoUnico() {
+    if (!alvoDetalhe) return;
+    setSalvandoUnico(true);
+    try {
+      const adicionados = await salvarCandidatosNoMonitoramento([alvoDetalhe]);
+      toast.success(
+        adicionados > 0
+          ? "Candidato adicionado ao Monitoramento"
+          : "O candidato já está no Monitoramento",
+      );
+    } catch (erro) {
+      const msg = erro instanceof Error ? erro.message : "Não foi possível salvar no monitoramento.";
+      toast.error(msg);
+    } finally {
+      setSalvandoUnico(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            Eleições
+            TSE — Eleições
           </h1>
           <p className="text-sm text-muted-foreground">
-            Candidaturas e patrimônio declarado via TSE (DivulgaCandContas).
+            Painel eleitoral direto no DivulgaCandContas: filtros geográficos, partidários, de
+            registro e de transparência.
           </p>
         </div>
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-        <div className="grid flex-1 gap-3 sm:grid-cols-3">
+        <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Ano</label>
             <Select value={String(ano)} onValueChange={mudarAno}>
@@ -256,6 +298,19 @@ export function TseView() {
           </div>
 
           <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Município</label>
+            <Input
+              value={municipio}
+              onChange={(e) => setMunicipio(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void buscarCandidatos();
+              }}
+              placeholder="Ex.: São Paulo"
+              aria-label="Filtrar por município"
+            />
+          </div>
+
+          <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Cargo</label>
             <Select value={String(codigoCargo)} onValueChange={(v) => setCodigoCargo(Number(v))}>
               <SelectTrigger className="w-full">
@@ -272,19 +327,55 @@ export function TseView() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.6fr)_auto] lg:items-end">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Partido / Federação / Coligação
+            </label>
             <Input
-              value={termo}
-              onChange={(e) => setTermo(e.target.value)}
+              value={partido}
+              onChange={(e) => setPartido(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void buscarCandidatos();
               }}
-              placeholder="Filtrar por nome de urna, nome completo ou partido…"
-              className="pl-9"
-              aria-label="Filtrar por nome ou partido"
+              placeholder="Ex.: PL, Federação PSDB…"
+              aria-label="Filtrar por partido"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Status da candidatura</label>
+            <Select value={situacao} onValueChange={setSituacao}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Todas" />
+              </SelectTrigger>
+              <SelectContent>
+                {SITUACOES_TSE.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s === "todas" ? "Todas as situações" : s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Nome / CPF / CNPJ / Nº de urna
+            </label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={termo}
+                onChange={(e) => setTermo(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void buscarCandidatos();
+                }}
+                placeholder="Buscar por nome de urna, nome completo, CPF/CNPJ…"
+                className="pl-9"
+                aria-label="Filtrar por nome, CPF ou CNPJ"
+              />
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -343,6 +434,23 @@ export function TseView() {
             </Button>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border/70 bg-secondary/20 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+        <strong className="text-foreground/80">Escopo dos filtros:</strong> ano, UF, município,
+        cargo, partido, status e termo operam direto na listagem do DivulgaCandContas. Gênero,
+        raça/cor, faixa etária, ocupação e patrimônio declarado ficam no{" "}
+        <strong className="text-foreground/80">dossiê do candidato</strong> (clique na linha). A
+        prestação de contas completa está no{" "}
+        <a
+          href="https://divulgacandcontas.tse.jus.br/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+        >
+          Portal do TSE (DivulgaCandContas)
+        </a>
+        .
       </div>
 
       {erroInformado && candidatos.length === 0 && (
@@ -434,6 +542,7 @@ export function TseView() {
                   <TableHead className="text-foreground">Nome de Urna</TableHead>
                   <TableHead className="text-foreground">Partido</TableHead>
                   <TableHead className="text-foreground">Número</TableHead>
+                  <TableHead className="text-foreground">Município</TableHead>
                   <TableHead className="text-foreground">Situação</TableHead>
                 </TableRow>
               </TableHeader>
@@ -450,17 +559,45 @@ export function TseView() {
                     title="Abrir dossiê patrimonial"
                   >
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        checked={selecionadas.has(candidato.id)}
-                        onCheckedChange={() => alternarCandidato(candidato.id)}
-                        aria-label={`Selecionar ${candidato.nomeUrna}`}
-                      />
+                      <div className="flex items-center gap-0.5">
+                        <Checkbox
+                          checked={selecionadas.has(candidato.id)}
+                          onCheckedChange={() => alternarCandidato(candidato.id)}
+                          aria-label={`Selecionar ${candidato.nomeUrna}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggleFavorito(String(candidato.id))}
+                          className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+                          aria-label={
+                            favoritos.includes(String(candidato.id))
+                              ? "Remover dos favoritos"
+                              : "Favoritar"
+                          }
+                          title={
+                            favoritos.includes(String(candidato.id))
+                              ? "Remover dos favoritos"
+                              : "Favoritar"
+                          }
+                        >
+                          <Star
+                            className={`h-4 w-4 transition-colors ${
+                              favoritos.includes(String(candidato.id))
+                                ? "fill-amber-400 text-amber-400"
+                                : "text-muted-foreground"
+                            }`}
+                          />
+                        </button>
+                      </div>
                     </TableCell>
                     <TableCell className="whitespace-normal break-words font-medium text-foreground">{candidato.nomeUrna}</TableCell>
                     <TableCell className="text-foreground/90">
                       {candidato.siglaPartido ?? "—"}
                     </TableCell>
                     <TableCell className="text-foreground/90">{candidato.numero ?? "—"}</TableCell>
+                    <TableCell className="whitespace-normal break-words text-foreground/80">
+                      {candidato.municipio || "—"}
+                    </TableCell>
                     <TableCell>
                       <Badge className={badgeSituacao(candidato.descricaoSituacao)}>
                         {candidato.descricaoSituacao ?? "—"}
@@ -556,6 +693,22 @@ export function TseView() {
           {alvoDetalhe && detalhe && !detalheCarregando && (
             <Dossie candidato={alvoDetalhe} detalhe={detalhe} />
           )}
+          {alvoDetalhe && detalhe && !detalheCarregando && (
+            <div className="sticky bottom-0 z-10 border-t border-border/70 bg-background/90 p-4 backdrop-blur-xl">
+              <Button
+                className="w-full gap-1.5"
+                onClick={adicionarAoMonitoramentoUnico}
+                disabled={salvandoUnico}
+              >
+                {salvandoUnico ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Pin className="h-4 w-4" />
+                )}
+                {salvandoUnico ? "Salvando…" : "Adicionar ao Monitoramento"}
+              </Button>
+            </div>
+          )}
         </SheetContent>
       </Sheet>
     </div>
@@ -626,6 +779,14 @@ function Dossie({ candidato, detalhe }: { candidato: TseCandidato; detalhe: TseC
               rotulo="Grau de Instrução"
               valor={detalhe.dados.grauInstrucao || "Não informado"}
             />
+            <LinhaDado
+              rotulo="Data de Nascimento"
+              valor={detalhe.dados.dataNascimento ? formatarData(detalhe.dados.dataNascimento) : "Não informada"}
+            />
+            <LinhaDado rotulo="Gênero" valor={detalhe.dados.genero || "Não informado"} />
+            <LinhaDado rotulo="Raça / Cor" valor={detalhe.dados.corRaca || "Não informada"} />
+            <LinhaDado rotulo="Estado Civil" valor={detalhe.dados.estadoCivil || "Não informado"} />
+            <LinhaDado rotulo="CPF" valor={detalhe.dados.cpf || "Não informado"} />
             <div className="sm:col-span-2">
               <LinhaDado rotulo="Coligação / Federação" valor={coligacao} />
             </div>
