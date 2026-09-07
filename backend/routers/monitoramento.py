@@ -11,7 +11,7 @@ router = APIRouter(prefix="/monitoramento", tags=["Monitoramento Setorial"])
 @limiter.limit(LIMITE_MONITORAMENTO)
 def monitorar_camara(
     request: Request,
-    q: str = Query(..., min_length=3, max_length=120, description="Palavra-chave para buscar nas ementas, ex: energia, tarifa, iFood"),
+    q: str = Query(..., min_length=3, max_length=120, description="Palavra-chave para buscar nas ementas, ex: energia, tarifa, marco regulatório"),
     ano: int = Query(2026, ge=1900, le=2100, description="Ano das proposições"),
     itens: int = Query(10, ge=1, le=50, description="Quantidade máxima de resultados")
 ):
@@ -81,16 +81,18 @@ def monitorar_senado(
             filtradas = []
             
             for m in lista_materias:
-                ementa = m.get("EmentaMateria", "") or ""
+                ementa = m.get("Ementa", "") or ""
                 if termo in ementa.lower():
                     filtradas.append({
-                        "codigo": m.get("CodigoMateria"),
-                        "sigla": m.get("SiglaCasaMateria"),
-                        "tipo": m.get("DescricaoSubTipoMateria"),
-                        "numero": m.get("NumeroMateria"),
-                        "ano": m.get("AnoMateria"),
+                        "codigo": m.get("Codigo"),
+                        "sigla": m.get("Sigla"),
+                        "tipo": m.get("DescricaoIdentificacao"),
+                        "numero": m.get("Numero"),
+                        "ano": m.get("Ano"),
                         "ementa": ementa,
-                        "autor": m.get("NomeAutorMateria")
+                        "autor": m.get("Autor"),
+                        "data": m.get("Data"),
+                        "url": m.get("UrlDetalheMateria")
                     })
                     
             return {

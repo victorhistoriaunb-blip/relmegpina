@@ -23,6 +23,13 @@ def _primeiro_token_identificacao(identificacao: Optional[str]) -> Optional[str]
     return token or None
 
 
+_PADRAO_RELATOR = re.compile(r"[Rr]elator(?:a|\(a\))?\s*[:\-]?\s*([A-ZÀ-Ú][^,;\n]{3,80})")
+_PADRAO_DISTRIBUICAO = re.compile(
+    r"Distribu(?:ído|ido|da)\s+(?:à|ao|a|o|para)\s+([^,;\n]{3,80}),?\s+para\s+emitir\s+r(?:e|é)lat[oó]ri",
+    re.IGNORECASE,
+)
+
+
 async def _enriquecer_senado(
     client: httpx.AsyncClient,
     materia: dict,
@@ -30,7 +37,9 @@ async def _enriquecer_senado(
     """Busca situação/comissão atual e relator de uma matéria do Senado.
 
     Usa o serviço 'dadosabertos/processo' (substituto do antigo tramitacao,
-    já descontinuado) para obter o andamento vigente.
+    já descontinuado) para obter o andamento vigente. O comissão atual vem do
+    colegiado de controle das autuações (CRA, CE etc.) e o relator, das
+    descrições de situações, informes legislativos e movimentações.
     """
     id_processo = materia.get("identificacaoProcesso")
     if not id_processo:
@@ -43,30 +52,10 @@ async def _enriquecer_senado(
 
         dados = resposta.json()
         situacao = dados.get("situacaoAtual")
-        comissao = None
-        relator = None
 
-        # Comissão: último colegiado diferente do Plenário em despachos/autuações
         registros = (dados.get("despachos") or []) + (dados.get("autuacoes") or [])
-        for registro in reversed(registros):
-            colegiado = _colegiado_em(registro)
-            sigla = colegiado.get("sigla") or colegiado.get("nome")
-            if sigla and str(sigla).strip().upper() != "PLEN":
-                comissao = str(sigla).strip()
-                break
-
-        # Relator: varre despachos por designação/menção a relator
-        for registro in dados.get("despachos") or []:
-            texto = str(registro)
-            if "relator" not in texto.lower():
-                continue
-
-            achado = re.search(r"[Rr]elator(?:\(a\))?\s*[:\-]?\s*([^,;\n]{5,80})", texto)
-            if achado:
-                nome = achado.group(1).strip(" .")
-                if nome.lower() not in ("a", "o", "designado", "designação"):
-                    relator = nome
-                    break
+        comissao = _comissao_atual(registros)
+        relator = _relator_da_materia(registros)
 
         return {
             "situacao": situacao,
@@ -78,12 +67,82 @@ async def _enriquecer_senado(
 
 
 def _colegiado_em(registro) -> dict:
+    """Normaliza o colegiado vigente de um despacho/autuação do Senado."""
     if not isinstance(registro, dict):
         return {}
     colegiado = (registro.get("encontroLegislativo") or {}).get("colegiado")
     if not colegiado:
         colegiado = registro.get("colegiado")
+    if not colegiado:
+        sigla = registro.get("siglaColegiadoControleAtual")
+        nome = registro.get("nomeColegiadoControleAtual")
+        if sigla or nome:
+            colegiado = {"sigla": sigla, "nome": nome}
     return colegiado or {}
+
+
+def _comissao_atual(registros) -> Optional[str]:
+    """Último colegiado diferente do Plenário em despachos/autuações.
+
+    A autuação expõe o colegiado de controle atual (ex.: CRA, CE) no próprio
+    registro e dentro das suas situações; o despacho traz o colegiado no
+    encontro legislativo. Nenhum deles deve ser confundido com o Plenário.
+    """
+    for registro in reversed(registros or []):
+        if not isinstance(registro, dict):
+            continue
+        colegiados = []
+        colegiado = _colegiado_em(registro)
+        if colegiado:
+            colegiados.append(colegiado)
+        for situacao in reversed(registro.get("situacoes") or []):
+            colegiado = _colegiado_em(situacao)
+            if colegiado:
+                colegiados.append(colegiado)
+        for colegiado in colegiados:
+            sigla = str(colegiado.get("sigla") or "").strip()
+            nome = str(colegiado.get("nome") or "").strip()
+            if sigla and sigla.upper() != "PLEN":
+                return sigla
+            if nome and "Plenário" not in nome:
+                return nome
+    return None
+
+
+def _relator_da_materia(registros) -> Optional[str]:
+    """Procura a designação de relator nas descrições do processo."""
+    textos: list[str] = []
+    for registro in registros or []:
+        if not isinstance(registro, dict):
+            continue
+        for campo in ("tipoMotivacao", "descricao"):
+            valor = registro.get(campo)
+            if isinstance(valor, str):
+                textos.append(valor)
+        for situacao in registro.get("situacoes") or []:
+            if isinstance(situacao, dict) and isinstance(situacao.get("descricao"), str):
+                textos.append(situacao["descricao"])
+        for informe in registro.get("informesLegislativos") or []:
+            if isinstance(informe, dict) and isinstance(informe.get("descricao"), str):
+                textos.append(informe["descricao"])
+        for mov in registro.get("movimentacoes") or []:
+            if isinstance(mov, dict) and isinstance(mov.get("descricao"), str):
+                textos.append(mov["descricao"])
+
+    for texto in reversed(textos):
+        if not str(texto).strip():
+            continue
+
+        achado = _PADRAO_DISTRIBUICAO.search(texto)
+        if achado:
+            return achado.group(1).strip(" .")
+
+        achado = _PADRAO_RELATOR.search(texto)
+        if achado:
+            nome = achado.group(1).strip(" .")
+            if nome.lower() not in ("a", "o", "designado", "designação"):
+                return nome
+    return None
 
 
 async def _listar_materias_senado(

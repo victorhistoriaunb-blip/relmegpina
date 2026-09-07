@@ -13,7 +13,11 @@ Deputados, Senado Federal, Diário Oficial da União (DOU) e TSE — devem ocorr
 - Qualquer *polling* automático ou biblioteca de processamento em *background*
   (`BackgroundTasks`, `APScheduler`, Celery, threads/daemons, handlers de
   `startup`/`lifespan` que disparem varreduras, loops com `while True`, etc.);
-- Consumo autônomo das APIs governamentais sem ação do usuário.
+- Consumo autônomo das APIs governamentais sem ação do usuário;
+- Auto-carregamento de varredura na montagem ou em qualquer ciclo de vida de
+  componentes no frontend (ex.: `autoCarregarVazio`, refs de "carregar uma
+  única vez ao abrir a aba", `useEffect` de montagem que dispare busca). Abrir
+  uma página/aba **não** é uma ação explícita de busca.
 
 ### O gatilho é sempre o usuário
 
@@ -45,3 +49,27 @@ desnecessário de recursos e do sobrecarregamento do servidor.
 - Não adicionar a chave `"crons"` em nenhum `vercel.json` do repositório.
 - Não introduzir `setInterval`/polling no frontend que dispare requisições sem
   interação explícita do usuário.
+- Abas/páginas com dados vazios devem apenas orientar o operador a usar o botão
+  de busca/atualização — nunca disparar a varredura sozinhas.
+
+### Exceção autorizada: `BackgroundTasks` em extração pesada sob demanda
+
+Aprovada em 07/09/2026 pelo operador ("Revisar AGENTS.md e implementar"),
+com requisitos rígidos:
+
+- **Disparo exclusivo por requisição HTTP explícita**: a `BackgroundTask` é
+  registrada APENAS dentro da rota `/tse/exportar/{ano}/{uf}/{codigo_cargo}`
+  (o próprio trigger on-demand) e retorna 202 + `task_id`, com status em
+  `GET /tse/execucoes/{task_id}` e log de etapas persistido em `backend/database.py`.
+- A tarefa registrada deve baixar o payload inicial no próprio handler, e a
+  varredura de enriquecimento não reutiliza caches após a falha da primeira
+  chamada — sempre passando pelo cache SQLite local.
+- **Nunca** agendar, cron, startup/lifespan, dispatcher automático ou polling
+  de fila. O worker é inerte sem a requisição do operador.
+- Manter os rate limits (slowapi) na rota de disparo, inclusive durante o
+  processamento em background.
+- Recusar (400/409) disparo de segunda tarefa concorrente para os mesmo filtros
+  enquanto uma execução do mesmo escopo estiver "Executando".
+
+Nenhuma outra rota, cli ou serviço pode invocar `BackgroundTasks` sem nova
+revisão e aprovação explícita deste documento.
