@@ -7,6 +7,8 @@ from exportador_local import (
     ClippingError,
     _caminho_modelo,
     _data_br,
+    _data_objeto,
+    _dentro_janela,
     _substituir_corpo,
 )
 from family_talks import filtrar
@@ -81,6 +83,124 @@ def test_data_br():
     assert _data_br("2026-09-07") == "07/09/2026"
     assert _data_br(None) is None
     assert _data_br("") is None
+
+
+def test_data_objeto_normaliza_formatos():
+    assert _data_objeto("2026-09-01").isoformat() == "2026-09-01"
+    assert _data_objeto("01/09/2026").isoformat() == "2026-09-01"
+    assert _data_objeto("2026-09-01T10:30:00").isoformat() == "2026-09-01"
+    assert _data_objeto(None) is None
+    assert _data_objeto("texto inválido") is None
+
+
+def test_dentro_janela_inclusiva_e_limites():
+    from datetime import date
+
+    ini, fim = date(2026, 8, 31), date(2026, 9, 4)
+
+    # Sem janela: tudo passa.
+    assert _dentro_janela("2026-01-01") is True
+    assert _dentro_janela(None) is True
+
+    # Dentro da janela (inclusive os extremos).
+    assert _dentro_janela("2026-08-31", ini, fim) is True
+    assert _dentro_janela("2026-09-04", ini, fim) is True
+    assert _dentro_janela("2026-09-01", ini, fim) is True
+    assert _dentro_janela("01/09/2026", ini, fim) is True
+
+    # Fora da janela.
+    assert _dentro_janela("2026-08-30", ini, fim) is False
+    assert _dentro_janela("2026-09-05", ini, fim) is False
+    assert _dentro_janela("2025-06-01", ini, fim) is False
+
+    # Data inválida/ausente com janela ativa: não passa.
+    assert _dentro_janela(None, ini, fim) is False
+    assert _dentro_janela("", ini, fim) is False
+    assert _dentro_janela("lixo", ini, fim) is False
+
+
+def test_janela_inversa_gera_erro(monkeypatch):
+    from exportador_local import _gerar_clipping_async
+
+    async def _falha_busca(keywords: list):
+        raise AssertionError("não deveria buscar com janela inválida")
+
+    monkeypatch.setattr("exportador_local._buscar_camara", _falha_busca)
+    monkeypatch.setattr("exportador_local._buscar_senado", _falha_busca)
+
+    import asyncio
+
+    try:
+        asyncio.run(_gerar_clipping_async(
+            keywords=["infância"],
+            data_inicio=_data_objeto("2026-09-04"),
+            data_fim=_data_objeto("2026-08-31"),
+        ))
+        assert False, "deveria levantar ClippingError"
+    except ClippingError as exc:
+        assert "data_fim anterior" in str(exc).lower()
+
+
+def test_gerar_clipping_aplica_janela_de_data(monkeypatch):
+    """A janela de datas é aplicada na busca real, antes do Family Talks."""
+    from datetime import date
+
+    from exportador_local import _gerar_clipping_async
+
+    async def _camara_fake(keywords: list):
+        return CAMARA_ITENS
+
+    async def _senado_fake(keywords: list):
+        # Item FORA da janela: apresentada em 2025, mas com tema válido.
+        return SENADO_ITENS + [{
+            "sigla": "PL",
+            "numero": "999",
+            "ano": 2025,
+            "codigo": 99,
+            "ementa": "Institui política de proteção à primeira infância.",
+            "autor": "Senadora Antiga",
+            "data": "2025-06-01",
+        }]
+
+    def _doc_fake(caminho):
+        from unittest.mock import MagicMock
+        return MagicMock()
+
+    def _caminho_modelo_fake():
+        from pathlib import Path
+        return Path("modelo.docx")
+
+    def _pasta_entregas_fake(*args, **kwargs):
+        from pathlib import Path
+        pasta = Path("C:/entregas")
+        pasta.mkdir(parents=True, exist_ok=True)
+        return pasta
+
+    monkeypatch.setattr("exportador_local._buscar_camara", _camara_fake)
+    monkeypatch.setattr("exportador_local._buscar_senado", _senado_fake)
+    monkeypatch.setattr("exportador_local.Document", _doc_fake)
+    monkeypatch.setattr("exportador_local._caminho_modelo", _caminho_modelo_fake)
+    monkeypatch.setattr("exportador_local._pasta_entregas", _pasta_entregas_fake)
+    monkeypatch.setattr("exportador_local._substituir_corpo", lambda *a, **k: None)
+
+    import asyncio
+
+    resultado = asyncio.run(_gerar_clipping_async(
+        keywords=["infância"],
+        periodo="2026-08-31_a_2026-09-04",
+        data_inicio=date(2026, 8, 31),
+        data_fim=date(2026, 9, 4),
+    ))
+
+    # Nada anterior a 31/08 e nada posterior a 04/09. O item "alienação
+    # parental" (CAMARA 2) sai no Family Talks; o de 2025 sai na janela; e o
+    # "reforma tributária" (SENADO 4/09) sai por fora de escopo.
+    datas = {str(i.get("data"))[:10] for i in resultado["camara"] + resultado["senado"]}
+    assert datas == {"2026-09-01", "2026-09-03"}
+    assert resultado["total"] == 2
+    assert resultado["filtro"]["fora_janela_senado"] == 1
+    assert resultado["filtro"]["data_inicio"] == "2026-08-31"
+    assert resultado["filtro"]["data_fim"] == "2026-09-04"
 
 
 def test_filtro_family_talks_escopo():

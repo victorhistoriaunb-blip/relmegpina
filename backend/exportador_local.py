@@ -200,6 +200,38 @@ def _data_br(valor: Any) -> Optional[str]:
     return f"{encontro.group(3)}/{encontro.group(2)}/{encontro.group(1)}" if encontro else (texto or None)
 
 
+def _data_objeto(valor: Any) -> Optional[_dt.date]:
+    """Converte 'DD/MM/AAAA' ou ISO ('2026-09-07'/timestamp) em date (comparável)."""
+    texto = str(valor or "").strip().split("T")[0]
+    for formato in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return _dt.datetime.strptime(texto, formato).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _dentro_janela(
+    valor: Any,
+    data_inicio: Optional[_dt.date] = None,
+    data_fim: Optional[_dt.date] = None,
+) -> bool:
+    """True se a data da proposição estiver na janela [data_inicio, data_fim].
+
+    Janela inclusiva nos dois extremos. Sem janela, retorna True (sem filtro).
+    """
+    if data_inicio is None and data_fim is None:
+        return True
+    data = _data_objeto(valor)
+    if data is None:
+        return False
+    if data_inicio is not None and data < data_inicio:
+        return False
+    if data_fim is not None and data > data_fim:
+        return False
+    return True
+
+
 async def _buscar_senado(keywords: List[str]) -> List[Dict[str, Any]]:
     """Busca matérias no Senado por palavras-chave (já traz autor, data e url)."""
     vistos: Dict[int, Dict[str, Any]] = {}
@@ -425,17 +457,26 @@ async def _gerar_clipping_async(
     ano: int = None,
     baixar: bool = False,
     aplicar_filtro_family_talks: bool = True,
+    data_inicio: Optional[_dt.date] = None,
+    data_fim: Optional[_dt.date] = None,
 ) -> Dict[str, Any]:
     """Núcleo assíncrono da geração (usado pela rota FastAPI).
 
     Filtro Inteligente Family Talks — POTENCIALIZADOR sob demanda (AGENTS.md:
     o operador aciona a rota; nada roda em segundo plano ou por agendamento):
         1. Busca bruta nas duas casas pelos termos da matriz;
-        2. Cruzamento de cada ementa com os TEMAS PRIORITÁRIOS;
-        3. Exclusão automática de pautas fora do escopo (jurídico de família,
+        2. Janela estrita de apresentação [data_inicio, data_fim] (inclusiva) —
+           apenas proposições novas do período pedido pelo operador;
+        3. Cruzamento de cada ementa com os TEMAS PRIORITÁRIOS;
+        4. Exclusão automática de pautas fora do escopo (jurídico de família,
            alienação parental, direito penal familiar e marcadores estranhos);
-        4. Apenas as proposições relevantes seguem para o documento.
+        5. Apenas as proposições relevantes seguem para o documento.
     """
+    if data_inicio and data_fim and data_fim < data_inicio:
+        raise ClippingError(
+            "data_fim anterior a data_inicio. Informe uma janela válida "
+            "(ex: 2026-08-31 a 2026-09-04)."
+        )
     ano_atual = ano if ano is not None else _dt.date.today().year
     palavras = [kw for kw in (keywords or KEYWORDS_PADRAO) if kw and kw.strip()]
     if not palavras:
@@ -447,8 +488,14 @@ async def _gerar_clipping_async(
         _buscar_camara(palavras),
         _buscar_senado(palavras),
     )
+
+    # 1b) Janela estrita de apresentação (filtro de datas do operador).
     total_camara = len(camara_bruta)
     total_senado = len(senado_bruto)
+    camara_bruta = [c for c in camara_bruta if _dentro_janela(c.get("data"), data_inicio, data_fim)]
+    senado_bruto = [s for s in senado_bruto if _dentro_janela(s.get("data"), data_inicio, data_fim)]
+    fora_janela_camara = total_camara - len(camara_bruta)
+    fora_janela_senado = total_senado - len(senado_bruto)
 
     # 2) Filtro de inteligência Family Talks.
     camara, senado = camara_bruta, senado_bruto
@@ -458,7 +505,9 @@ async def _gerar_clipping_async(
         database.registrar_evento(
             "family_talks",
             f"Câmara {len(camara)}/{total_camara} aprovadas; Senado {len(senado)}/{total_senado} "
-            f"aprovadas; {len(camara) + len(senado)} itens mantidos no relatório.",
+            f"aprovadas; {len(camara) + len(senado)} itens mantidos no relatório. "
+            f"Janela: {data_inicio or '—'} a {data_fim or '—'} "
+            f"(fora da janela: Câmara {fora_janela_camara}, Senado {fora_janela_senado}).",
         )
 
     # 3) Geração a partir do modelo.
@@ -472,6 +521,20 @@ async def _gerar_clipping_async(
     destino = _pasta_entregas() / nome
     doc.save(str(destino))
 
+    filtro = {
+        "matriz": "Family Talks",
+        "ativos": aplicar_filtro_family_talks,
+        "temas_detectados": family_talks.temas_detectados(camara + senado),
+        "descartados_camara": (total_camara - len(camara)) - fora_janela_camara,
+        "descartados_senado": (total_senado - len(senado)) - fora_janela_senado,
+        "descartados_total": (total_camara - len(camara)) + (total_senado - len(senado))
+        - fora_janela_camara - fora_janela_senado,
+        "fora_janela_camara": fora_janela_camara,
+        "fora_janela_senado": fora_janela_senado,
+        "data_inicio": data_inicio.isoformat() if data_inicio else None,
+        "data_fim": data_fim.isoformat() if data_fim else None,
+    }
+
     return {
         "arquivo": nome,
         "caminho": str(destino),
@@ -484,14 +547,7 @@ async def _gerar_clipping_async(
         "modelo": str(caminho_modelo),
         "camara": camara,
         "senado": senado,
-        "filtro": {
-            "matriz": "Family Talks",
-            "ativos": aplicar_filtro_family_talks,
-            "temas_detectados": family_talks.temas_detectados(camara + senado),
-            "descartados_camara": total_camara - len(camara),
-            "descartados_senado": total_senado - len(senado),
-            "descartados_total": (total_camara - len(camara)) + (total_senado - len(senado)),
-        },
+        "filtro": filtro,
     }
 
 
@@ -501,11 +557,14 @@ def gerar_clipping(
     ano: int = None,
     baixar: bool = False,
     aplicar_filtro_family_talks: bool = True,
+    data_inicio: Optional[str] = None,
+    data_fim: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Wrapper síncrono (CLI/scripts). Para uso assíncrono, chame _gerar_clipping_async."""
     return asyncio.run(_gerar_clipping_async(
         keywords=keywords, periodo=periodo, ano=ano, baixar=baixar,
         aplicar_filtro_family_talks=aplicar_filtro_family_talks,
+        data_inicio=_data_objeto(data_inicio), data_fim=_data_objeto(data_fim),
     ))
 
 
@@ -529,12 +588,16 @@ async def gerar_clipping_rota(
     periodo: Optional[str] = Query(None, description="Rótulo do arquivo (ex: 2026-09-06)"),
     baixar: bool = Query(False, description="True = retorna o .docx como download"),
     sem_filtro: bool = Query(False, description="True = desativa o Filtro Inteligente Family Talks (varrredura bruta)"),
+    data_inicio: Optional[str] = Query(None, description="Início da janela de apresentação (ISO: 2026-08-31)"),
+    data_fim: Optional[str] = Query(None, description="Fim da janela de apresentação (ISO: 2026-09-04)"),
 ):
     """
     Gera o Clipping de Novas Proposições (sob demanda — conforme AGENTS.md).
 
     - Busca Câmara (PEC, PLP, PL, MPV, PDC) e Senado pelos temas da matriz
       Family Talks e cruza cada ementa com os TEMAS PRIORITÁRIOS.
+    - data_inicio/data_fim: filtro estrito e inclusivo pela data de
+      apresentação (apenas proposições NOVAS daquele período).
     - Exclui automaticamente pautas fora do escopo (jurídico de família,
       alienação parental, direito penal familiar e marcadores estranhos).
     - Formato de entrega: Identificação (ex: PL 595/2024), Ementa, Autor
@@ -549,6 +612,8 @@ async def gerar_clipping_rota(
         resultado = await _gerar_clipping_async(
             keywords=lista_palavras, periodo=periodo,
             aplicar_filtro_family_talks=not sem_filtro,
+            data_inicio=_data_objeto(data_inicio),
+            data_fim=_data_objeto(data_fim),
         )
     except ClippingError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
