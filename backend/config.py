@@ -62,6 +62,26 @@ class Configuracoes(BaseSettings):
     log_level: str = "INFO"
 
     # ------------------------------------------------------------------
+    # Templates (100% portáteis — residem DENTRO do repositório, nunca em
+    # caminho absoluto externo como Desktop/RelMeg - Entregas). Referências
+    # relativas tornam a aplicação autossuficiente e copiável para qualquer
+    # máquina/usuário do Windows sem quebrar a montagem dos documentos.
+    # ------------------------------------------------------------------
+    templates_dir: Path = DIR_BACKEND / "templates"
+    # Clipping Semanal — CRÍTICO: sem fallback, aborte o startup (fail-fast).
+    modelo_clipping: Path = templates_dir / "MODELO A SER SEGUIDO.docx"
+    # Excel "MODELO BASE" do TSE — tem fallback embutido (gabarito canônico).
+    modelo_base_template: Path = templates_dir / "MODELO BASE"
+
+    # ------------------------------------------------------------------
+    # Segurança de superfície (X-API-Key via header)
+    # ------------------------------------------------------------------
+    # Se definida (env RELMEG_API_KEY), TODAS as rotas exigem o header
+    # "X-API-Key". Se vazia, a API roda apenas com aviso de segurança
+    # (destinada exclusivamente a ambiente localhost/desenvolvimento).
+    relmeg_api_key: str = ""
+
+    # ------------------------------------------------------------------
     # TSE (DivulgaCandContas) — parâmetros operacionais
     # ------------------------------------------------------------------
     tse_base_url: str = "https://divulgacandcontas.tse.jus.br/divulga/rest/v1"
@@ -125,6 +145,7 @@ class Configuracoes(BaseSettings):
             self.data_dir,
             self.log_dir,
             self.relmeg_cache_db.parent,
+            self.templates_dir,
         )
         for pasta in pastas:
             pasta.mkdir(parents=True, exist_ok=True)

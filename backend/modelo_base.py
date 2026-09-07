@@ -44,7 +44,7 @@ COLUNAS_MODELO_BASE = [
     "Membro da FPE \n2023 a 2026\n(Somente para reeleição)",
     "Membro da FCS \n2023 a 2026\n(Somente para reeleição)",
     "Membro da FPBio \n2023 a 2026\n(Somente para reeleição)",
-    "Membro da FPEvang\n2023 a 2026\n(Somente para reeleição)",
+    "Membro da FPEvangê\n2023 a 2026\n(Somente para reeleição)",
     "Sinergia FPE",
     "Eixo de Atuação",
     "Celular Parlamentar",
@@ -73,7 +73,14 @@ _LARGURAS_FALLBACK = {
 
 
 def _caminho_modelo() -> Path:
-    """Caminho do arquivo MODELO BASE dentro da pasta de entregas TSE."""
+    """Caminho do arquivo MODELO BASE (template interno do repositório).
+
+    Preferência: backend/templates/MODELO BASE (portátil, referência relativa).
+    Se ausente, cai para a pasta legada das entregas TSE (backward compat).
+    """
+    preferido = settings.modelo_base_template
+    if preferido.exists():
+        return preferido
     return settings.dir_tse / MODELO_NOME
 
 

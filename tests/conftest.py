@@ -25,3 +25,6 @@ os.environ["TSE_CACHE_TTL"] = "3600"
 os.environ["TSE_BASE_URL"] = "http://tse.invalido.invalid/rest/v1"
 os.environ["TSE_ID_ELEICAO_2026"] = "2055502026"
 os.environ["RELMEG_CORS_ORIGINS_EXTRA"] = ""
+# Desliga a autenticação X-API-Key na suíte (não enviamos header nos testes).
+# O template do Clipping fica no default backend/templates (já versionado).
+os.environ["RELMEG_API_KEY"] = ""

@@ -244,10 +244,19 @@ def test_matriz_family_talks_temas_e_exclusoes():
     assert len(family_talks.temas_detectados(aprovados)) >= 2
 
 
-def test_rota_clipping_rejeita_template_ausente():
+def test_rota_clipping_rejeita_template_ausente(monkeypatch):
     from fastapi.testclient import TestClient
 
+    import exportador_local
     import main
+
+    def _modelo_ausente():
+        raise ClippingError(
+            "Modelo não encontrado. Confirme que 'MODELO A SER SEGUIDO.docx' "
+            "está na pasta backend/templates/ do repositório."
+        )
+
+    monkeypatch.setattr(exportador_local, "_caminho_modelo", _modelo_ausente)
 
     with TestClient(main.app) as cliente:
         resposta = cliente.post(

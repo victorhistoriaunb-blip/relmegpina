@@ -78,11 +78,12 @@ def _pasta_entregas() -> Path:
 
 
 def _caminho_modelo() -> Path:
-    caminho = _pasta_entregas() / MODELO_NOME
+    caminho = settings.modelo_clipping
     if not caminho.exists():
         raise ClippingError(
-            f"Modelo não encontrado em: {caminho}. Confirme que 'MODELO A SER SEGUIDO.docx' "
-            "está na pasta 'Novas proposições' de 'RelMeg - Entregas'."
+            f"Modelo não encontrado em: {caminho}. Confirme que "
+            "'MODELO A SER SEGUIDO.docx' está na pasta backend/templates/ "
+            "do repositório."
         )
     return caminho
 
@@ -483,6 +484,10 @@ async def _gerar_clipping_async(
         placeholders = ", ".join(KEYWORDS_PADRAO[:5])
         raise ClippingError(f"Nenhuma palavra-chave informada. Use, ex: {placeholders}.")
 
+    # Fail-fast: valida o template ANTES de acionar as APIs governamentais
+    # (não queima rate-limit se o modelo estiver ausente — AGENTS.md).
+    caminho_modelo = _caminho_modelo()
+
     # 1) Busca de dados (sob demanda).
     camara_bruta, senado_bruto = await asyncio.gather(
         _buscar_camara(palavras),
@@ -510,8 +515,7 @@ async def _gerar_clipping_async(
             f"(fora da janela: Câmara {fora_janela_camara}, Senado {fora_janela_senado}).",
         )
 
-    # 3) Geração a partir do modelo.
-    caminho_modelo = _caminho_modelo()
+    # 3) Geração a partir do modelo (template já validado no início).
     doc = Document(str(caminho_modelo))
     _substituir_corpo(doc, camara, senado)
 

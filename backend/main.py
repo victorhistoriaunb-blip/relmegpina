@@ -1,5 +1,6 @@
 import logging
 import sys
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,8 @@ from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from rate_limit import limiter
 from config import settings
@@ -86,14 +89,95 @@ def _configurar_loguru() -> None:
 _configurar_loguru()
 logger.info("RelMeg API iniciando — observabilidade via loguru (nível {})", settings.log_level)
 
-# Garante as pastas essenciais (entregas, cache, logs) — apenas filesystem local,
-# sem nenhuma consulta a API externa (conforme AGENTS.md).
+# Garante as pastas essenciais (entregas, cache, logs, templates) — apenas
+# filesystem local, sem nenhuma consulta a API externa (conforme AGENTS.md).
 settings.garantir_diretorios()
+
+
+def _validar_dependencias_criticas() -> None:
+    """Validação FAIL-FAST de startup: dependências físicas SEM fallback.
+
+    Apenas verificação de arquivos locais — nenhuma chamada a API externa
+    (conforme AGENTS.md: handlers de startup/lifespan não podem consultar
+    APIs externas, mas podem validar o filesystem).
+
+    Se um arquivo crítico estiver ausente, a aplicação NÃO inicializa: derruba
+    imediatamente com log CRÍTICO, em vez de falhar com 500 no meio de um
+    relatório de última hora.
+    """
+    criticos = (
+        (settings.modelo_clipping, "MODELO A SER SEGUIDO.docx (Clipping Semanal)"),
+    )
+    ausentes = [f"{nome} -> {caminho}" for caminho, nome in criticos if not caminho.exists()]
+    if ausentes:
+        logger.critical(
+            "FALHA FATAL NO STARTUP — dependência crítica ausente: {}", "; ".join(ausentes)
+        )
+        raise RuntimeError(
+            "Startup abortado: o template crítico está ausente. Restaure os "
+            "arquivos em backend/templates/ e reinicie."
+        )
+    if not settings.modelo_base_template.exists():
+        logger.warning(
+            "MODELO BASE ausente em {} — será usado o gabarito canônico de fallback.",
+            settings.modelo_base_template,
+        )
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    _validar_dependencias_criticas()
+    yield
+
 
 app = FastAPI(
     title="RelMeg API",
-    description="Back-end de monitoramento legislativo e stakeholder intelligence"
+    description="Back-end de monitoramento legislativo e stakeholder intelligence",
+    lifespan=_lifespan,
 )
+
+# ---------------------------------------------------------------------------
+# Segurança de superfície (X-API-Key) — opcional por env (RELMEG_API_KEY)
+# ---------------------------------------------------------------------------
+# Se a chave estiver definida, TODAS as rotas (exceto infraestrutura/docs)
+# exigem o header. Se vazia, a API permanece aberta com aviso claro — apta
+# apenas para ambiente localhost/desenvolvimento.
+
+_CAMINHOS_ISENTOS_API_KEY = {
+    "/",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/docs/oauth2-redirect",
+    "/favicon.ico",
+}
+
+
+class _VerificarApiKey(BaseHTTPMiddleware):
+    """Rejeita 401 qualquer requisição sem o header X-API-Key válido."""
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        if request.url.path in _CAMINHOS_ISENTOS_API_KEY:
+            return await call_next(request)
+        if request.headers.get("X-API-Key") != settings.relmeg_api_key:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "API key ausente ou inválida. Envie o header X-API-Key."},
+            )
+        return await call_next(request)
+
+
+if settings.relmeg_api_key:
+    logger.info(
+        "Autenticação X-API-Key ATIVA — todas as rotas exigem o header X-API-Key."
+    )
+else:
+    logger.warning(
+        "RELMEG_API_KEY não definida — API SEM AUTENTICAÇÃO. Configure-a em "
+        "backend/.env antes de expor a API fora do localhost."
+    )
 
 # Rate limiting (slowapi): limite genérico para todas as rotas + limites
 # específicos nas rotas pesadas via @limiter.limit (ver backend/rate_limit.py).
@@ -120,10 +204,12 @@ allow_origins = [*origens_padrao, *origens_configuradas]
 
 # Ordem dos middlewares: Starlette empilha de trás para frente, então a CORS
 # é adicionada por último para ficar como a camada mais externa (respostas 429
-# e erros também recebem os cabeçalhos CORS corretos).
-app.add_middleware(
-    SlowAPIMiddleware,
-)
+# e erros também recebem os cabeçalhos CORS corretos). A verificação de
+# API-Key fica IMEDIATAMENTE dentro da CORS: instala o 401 máxima cedo (não
+# consome rate-limit nem processamento) porém ainda exige o header real.
+app.add_middleware(SlowAPIMiddleware)
+if settings.relmeg_api_key:
+    app.add_middleware(_VerificarApiKey)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
