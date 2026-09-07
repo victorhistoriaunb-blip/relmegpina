@@ -142,12 +142,18 @@ def _agora_utc() -> str:
 
 @contextmanager
 def _conectar() -> Iterator[sqlite3.Connection]:
-    """Abre conexão SQLite (WAL) e GARANTE fechamento automático no `with`.
+    """Abre conexão SQLite (WAL) com TRINDADE TRANSACIONAL garantida.
 
-    Thread-safety: ao sair do bloco ``with`` a conexão é encerrada
-    explicitamente (``con.close()``). Isso impede conexões penduradas quando
-    BackgroundTasks são abortadas/encerradas abruptamente — evitando o erro
-    "database is locked" por conexões nunca liberadas.
+    Padrão obrigatório da arquitetura: yield → commit → rollback → close.
+    - Yield: disponibiliza a conexão ao corpo do bloco ``with``;
+    - commit(): grava a transação de forma atômica se o corpo for concluído
+      sem erro (redundante/simples quando a própria função já commita);
+    - rollback(): reverte QUALQUER operação pendente se uma exceção for
+      disparada no meio da escrita — previne corrupção de dados (arquivo DB
+      nunca fica pela metade);
+    - close(): libera a conexão/trava no arquivo mesmo com exceção —
+      thread-safety, evita "database is locked" quando BackgroundTasks são
+      abortadas/encerradas abruptamente.
     """
     caminho = caminho_db()
     caminho.parent.mkdir(parents=True, exist_ok=True)
@@ -158,6 +164,10 @@ def _conectar() -> Iterator[sqlite3.Connection]:
     con.execute("PRAGMA busy_timeout=30000")
     try:
         yield con
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
     finally:
         con.close()
 
@@ -176,7 +186,6 @@ def init_db() -> None:
                 _TABELA_EXECUCOES_TSE + ";\n" + _TABELA_EVENTOS + ";\n" +
                 ";\n".join(_INDICES)
             )
-            con.commit()
         _ini_ok = True
 
 
@@ -224,7 +233,6 @@ def registrar_uso(cache_key: str) -> None:
                 "UPDATE tse_cache_execucoes SET ultimo_acesso = ? WHERE cache_key = ?",
                 (_agora_utc(), cache_key),
             )
-            con.commit()
     except sqlite3.Error:
         pass
 
@@ -305,7 +313,6 @@ def salvar_candidatos_tse(
                 meta and json.dumps(meta, ensure_ascii=False, default=str) or None,
             ),
         )
-        con.commit()
 
 
 def carregar_candidatos_tse(cache_key: str) -> Optional[List[Dict[str, Any]]]:
@@ -358,7 +365,6 @@ def criar_execucao_tse(
             "UPDATE tse_execucoes SET etapas = ? WHERE task_id = ?",
             (json.dumps([f"{agora} Iniciado"], ensure_ascii=False), task_id),
         )
-        con.commit()
 
 
 def atualizar_execucao_tse(
@@ -415,7 +421,6 @@ def atualizar_execucao_tse(
                     " WHERE task_id = ?",
                     parametros,
                 )
-            con.commit()
     except sqlite3.Error:
         pass
 
@@ -501,7 +506,6 @@ def registrar_evento(tipo: str, detalhe: str) -> None:
                 "VALUES (?, ?, ?)",
                 (tipo, str(detalhe)[:2000], _agora_utc()),
             )
-            con.commit()
     except sqlite3.Error:
         pass
 
