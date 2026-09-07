@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 import pandas as pd
+from loguru import logger
 
 import database
 from config import settings
@@ -510,7 +511,8 @@ async def processar_extracao_tse_em_segundo_plano(
     """Executa a extração pesada fora da requisição HTTP e registra o status.
 
     Robustez: qualquer falha (rede, timeout, 403 do TSE) é capturada e gravada
-    no log da execução — o servidor nunca derruba por causa do worker.
+    no log da execução — o servidor nunca derruba por causa do worker. Falhas
+    também disparam logger.error no terminal do uvicorn (observabilidade).
     """
     try:
         await asyncio.to_thread(
@@ -549,7 +551,15 @@ async def processar_extracao_tse_em_segundo_plano(
             caminho_arquivo=caminho,
             detalhe=f"Origem: {origem}. {len(df)} candidato(s).",
         )
+        logger.info(
+            "Extração TSE concluída (task={} ano={} uf={} cargo={}): {} candidato(s), origem={}",
+            task_id, ano, uf, codigo_cargo, len(df), origem,
+        )
     except ExtrairTSEError as exc:
+        logger.error(
+            "Extração TSE FALHOU (task={}ano={} uf={} cargo={}): {}",
+            task_id, ano, uf, codigo_cargo, exc,
+        )
         await asyncio.to_thread(
             database.atualizar_execucao_tse, task_id,
             status="Falhou", etapa="Falhou", detalhe=str(exc),
@@ -559,6 +569,10 @@ async def processar_extracao_tse_em_segundo_plano(
             f"TSE {ano}/{uf} (cargo {codigo_cargo}): {exc}",
         )
     except Exception as exc:  # nunca deixe o worker quebrar o processo
+        logger.error(
+            "Extração TSE FALHOU (task={} ano={} uf={} cargo={}): {}: {}",
+            task_id, ano, uf, codigo_cargo, type(exc).__name__, exc,
+        )
         await asyncio.to_thread(
             database.atualizar_execucao_tse, task_id,
             status="Falhou", etapa="Falhou",

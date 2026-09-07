@@ -57,6 +57,9 @@ class Configuracoes(BaseSettings):
     data_dir: Path = DIR_BACKEND / "data"
     log_dir: Path = DIR_BACKEND / "logs"
     relmeg_cache_db: Path = DIR_BACKEND / "data" / "relmeg_cache.db"
+    # Nível de log da observabilidade (loguru). Sobrescrevível via env
+    # RELMEG_LOG_LEVEL. Em produção recomendado "INFO"; depuração: "DEBUG".
+    log_level: str = "INFO"
 
     # ------------------------------------------------------------------
     # TSE (DivulgaCandContas) — parâmetros operacionais

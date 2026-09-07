@@ -1,5 +1,9 @@
+import logging
+import sys
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -24,6 +28,63 @@ from routers import (
     auditoria,
 )
 from routers.senado import materias as senado_materias, comissoes as senado_comissoes
+
+# ---------------------------------------------------------------------------
+# Observabilidade — loguru (AGENTS.md: apenas filesystem local + stderr).
+# Saída principal: stderr (terminal do uvicorn). Persistência em arquivo com
+# rotação diária em backend/logs/relmeg_{DATA}.log, silenciosa em falha de
+# escrita (ambientes efêmeros não devem derrubar a aplicação).
+# ---------------------------------------------------------------------------
+
+
+class _InterceptHandler(logging.Handler):
+    """Roteia os logs do stdlib (uvicorn, gunicorn, slowapi) para o loguru."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            nivel = logging.getLevelName(record.levelname)
+        except ValueError:
+            nivel = record.levelno
+        logger.log(nivel, record.getMessage())
+
+
+def _configurar_loguru() -> None:
+    logger.remove()
+    logger.add(
+        sys.stderr,
+        level=settings.log_level,
+        colorize=True,
+        format=(
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+            "<level>{message}</level>"
+        ),
+    )
+    try:
+        logger.add(
+            settings.log_dir / "relmeg_{time:YYYY-MM-DD}.log",
+            level=settings.log_level,
+            rotation="00:00",
+            retention="14 days",
+            encoding="utf-8",
+            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+        )
+    except OSError:
+        # Ambientes efêmeros sem escrita persistente: seguimos só com stderr.
+        pass
+
+    # Intercepta o logging padrão para que os logs do uvicorn/starlette também
+    # apareçam formatados pelo loguru no terminal do servidor.
+    logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
+    for _nome in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
+        logging.getLogger(_nome).handlers.clear()
+        logging.getLogger(_nome).propagate = False
+        logging.getLogger(_nome).handlers = [_InterceptHandler()]
+
+
+_configurar_loguru()
+logger.info("RelMeg API iniciando — observabilidade via loguru (nível {})", settings.log_level)
 
 # Garante as pastas essenciais (entregas, cache, logs) — apenas filesystem local,
 # sem nenhuma consulta a API externa (conforme AGENTS.md).

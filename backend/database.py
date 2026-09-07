@@ -26,9 +26,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from config import settings
 
@@ -139,8 +140,15 @@ def _agora_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _conectar() -> sqlite3.Connection:
-    """Abre conexão SQLite com WAL e timeout defensivo às concorrências."""
+@contextmanager
+def _conectar() -> Iterator[sqlite3.Connection]:
+    """Abre conexão SQLite (WAL) e GARANTE fechamento automático no `with`.
+
+    Thread-safety: ao sair do bloco ``with`` a conexão é encerrada
+    explicitamente (``con.close()``). Isso impede conexões penduradas quando
+    BackgroundTasks são abortadas/encerradas abruptamente — evitando o erro
+    "database is locked" por conexões nunca liberadas.
+    """
     caminho = caminho_db()
     caminho.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(str(caminho), timeout=60)
@@ -148,7 +156,10 @@ def _conectar() -> sqlite3.Connection:
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA synchronous=NORMAL")
     con.execute("PRAGMA busy_timeout=30000")
-    return con
+    try:
+        yield con
+    finally:
+        con.close()
 
 
 def init_db() -> None:
@@ -159,16 +170,13 @@ def init_db() -> None:
     with _cerveja_lock:
         if _ini_ok:
             return
-        con = _conectar()
-        try:
+        with _conectar() as con:
             con.executescript(
                 _TABELA_CANDIDATOS + ";\n" + _TABELA_EXECUCOES + ";\n" +
                 _TABELA_EXECUCOES_TSE + ";\n" + _TABELA_EVENTOS + ";\n" +
                 ";\n".join(_INDICES)
             )
             con.commit()
-        finally:
-            con.close()
         _ini_ok = True
 
 
@@ -180,15 +188,12 @@ def info_cache(cache_key: str) -> Optional[Dict[str, Any]]:
     """Retorna os metadados da última execução para a chave, ou None."""
     try:
         init_db()
-        con = _conectar()
-        try:
+        with _conectar() as con:
             linha = con.execute(
                 "SELECT * FROM tse_cache_execucoes WHERE cache_key = ?",
                 (cache_key,),
             ).fetchone()
             return dict(linha) if linha else None
-        finally:
-            con.close()
     except sqlite3.Error:
         return None
 
@@ -214,15 +219,12 @@ def registrar_uso(cache_key: str) -> None:
     """Atualiza o último acesso (auditoria/depuração de hit no cache)."""
     try:
         init_db()
-        con = _conectar()
-        try:
+        with _conectar() as con:
             con.execute(
                 "UPDATE tse_cache_execucoes SET ultimo_acesso = ? WHERE cache_key = ?",
                 (_agora_utc(), cache_key),
             )
             con.commit()
-        finally:
-            con.close()
     except sqlite3.Error:
         pass
 
@@ -271,8 +273,7 @@ def salvar_candidatos_tse(
     """
     init_db()
     capturado = _agora_utc()
-    con = _conectar()
-    try:
+    with _conectar() as con:
         con.execute("BEGIN")
         con.execute("DELETE FROM tse_candidatos_raw WHERE cache_key = ?", (cache_key,))
         con.executemany(
@@ -305,8 +306,6 @@ def salvar_candidatos_tse(
             ),
         )
         con.commit()
-    finally:
-        con.close()
 
 
 def carregar_candidatos_tse(cache_key: str) -> Optional[List[Dict[str, Any]]]:
@@ -317,15 +316,12 @@ def carregar_candidatos_tse(cache_key: str) -> Optional[List[Dict[str, Any]]]:
     """
     try:
         init_db()
-        con = _conectar()
-        try:
+        with _conectar() as con:
             linhas = con.execute(
                 "SELECT " + _CHAVES_SQL + " FROM tse_candidatos_raw "
                 "WHERE cache_key = ? ORDER BY linha ASC",
                 (cache_key,),
             ).fetchall()
-        finally:
-            con.close()
     except sqlite3.Error:
         return None
     if not linhas:
@@ -349,8 +345,7 @@ def criar_execucao_tse(
     """Abre um registro de execução com status inicial 'Iniciado'."""
     init_db()
     agora = _agora_utc()
-    con = _conectar()
-    try:
+    with _conectar() as con:
         con.execute(
             "INSERT OR REPLACE INTO tse_execucoes "
             "(task_id, ano, uf, codigo_cargo, municipio, limite, "
@@ -364,8 +359,6 @@ def criar_execucao_tse(
             (json.dumps([f"{agora} Iniciado"], ensure_ascii=False), task_id),
         )
         con.commit()
-    finally:
-        con.close()
 
 
 def atualizar_execucao_tse(
@@ -385,8 +378,7 @@ def atualizar_execucao_tse(
     """
     try:
         init_db()
-        con = _conectar()
-        try:
+        with _conectar() as con:
             agora = _agora_utc()
             campos = []
             parametros: list = []
@@ -424,8 +416,6 @@ def atualizar_execucao_tse(
                     parametros,
                 )
             con.commit()
-        finally:
-            con.close()
     except sqlite3.Error:
         pass
 
@@ -434,8 +424,7 @@ def obter_execucao_tse(task_id: str) -> Optional[Dict[str, Any]]:
     """Retorna o registro completo de uma execução (ou None)."""
     try:
         init_db()
-        con = _conectar()
-        try:
+        with _conectar() as con:
             linha = con.execute(
                 "SELECT * FROM tse_execucoes WHERE task_id = ?", (task_id,)
             ).fetchone()
@@ -447,8 +436,6 @@ def obter_execucao_tse(task_id: str) -> Optional[Dict[str, Any]]:
             except (TypeError, ValueError):
                 registro["etapas"] = []
             return registro
-        finally:
-            con.close()
     except sqlite3.Error:
         return None
 
@@ -457,8 +444,7 @@ def listar_execucoes_tse(limite: int = 20) -> List[Dict[str, Any]]:
     """Lista as execuções mais recentes (para a rota geral de status)."""
     try:
         init_db()
-        con = _conectar()
-        try:
+        with _conectar() as con:
             linhas = con.execute(
                 "SELECT task_id, ano, uf, codigo_cargo, status, criado_em, "
                 "       concluido_em, total_candidatos, origem "
@@ -466,8 +452,6 @@ def listar_execucoes_tse(limite: int = 20) -> List[Dict[str, Any]]:
                 (int(limite),),
             ).fetchall()
             return [dict(r) for r in linhas]
-        finally:
-            con.close()
     except sqlite3.Error:
         return []
 
@@ -485,8 +469,7 @@ def execucao_ativa_tse(
     """
     try:
         init_db()
-        con = _conectar()
-        try:
+        with _conectar() as con:
             linha = con.execute(
                 "SELECT task_id, status, criado_em FROM tse_execucoes "
                 "WHERE ano = ? AND uf = ? AND codigo_cargo = ? "
@@ -496,8 +479,6 @@ def execucao_ativa_tse(
                 (ano, uf.upper(), codigo_cargo, municipio),
             ).fetchone()
             return dict(linha) if linha else None
-        finally:
-            con.close()
     except sqlite3.Error:
         return None
 
@@ -514,16 +495,13 @@ def registrar_evento(tipo: str, detalhe: str) -> None:
     """
     try:
         init_db()
-        con = _conectar()
-        try:
+        with _conectar() as con:
             con.execute(
                 "INSERT INTO auditoria_eventos (tipo, detalhe, criado_em) "
                 "VALUES (?, ?, ?)",
                 (tipo, str(detalhe)[:2000], _agora_utc()),
             )
             con.commit()
-        finally:
-            con.close()
     except sqlite3.Error:
         pass
 
@@ -532,16 +510,13 @@ def listar_eventos(limite: int = 50) -> List[Dict[str, Any]]:
     """Lista os eventos estruturados mais recentes (auditoria)."""
     try:
         init_db()
-        con = _conectar()
-        try:
+        with _conectar() as con:
             linhas = con.execute(
                 "SELECT id, tipo, detalhe, criado_em FROM auditoria_eventos "
                 "ORDER BY id DESC LIMIT ?",
                 (max(1, int(limite)),),
             ).fetchall()
             return [dict(r) for r in linhas]
-        finally:
-            con.close()
     except sqlite3.Error:
         return []
 
@@ -550,14 +525,11 @@ def resumo_metricas_tse() -> Dict[str, Any]:
     """Resumo operacional das extrações (taxa de sucesso, falhas, tempo médio)."""
     try:
         init_db()
-        con = _conectar()
-        try:
+        with _conectar() as con:
             linhas = con.execute(
                 "SELECT status, criado_em, concluido_em, total_candidatos "
                 "FROM tse_execucoes",
             ).fetchall()
-        finally:
-            con.close()
     except sqlite3.Error:
         linhas = []
 
@@ -595,8 +567,7 @@ def historico_execucoes_tse(limite: int = 50) -> List[Dict[str, Any]]:
     """Panorama detalhado das últimas execuções (status, tempos, arquivo)."""
     try:
         init_db()
-        con = _conectar()
-        try:
+        with _conectar() as con:
             linhas = con.execute(
                 "SELECT task_id, ano, uf, codigo_cargo, municipio, status, "
                 "       criado_em, concluido_em, total_candidatos, origem, "
@@ -613,7 +584,5 @@ def historico_execucoes_tse(limite: int = 50) -> List[Dict[str, Any]]:
                     reg["etapas"] = []
                 registros.append(reg)
             return registros
-        finally:
-            con.close()
     except sqlite3.Error:
         return []
